@@ -173,7 +173,7 @@ mvn spring-boot:run
 | Entity | ✅ Completo |
 | Repository | ✅ Completo |
 | Service | ✅ Completo |
-| Security (JWT) | ⏳ In corso (manca JwtService) |
+| Security (JWT) | ✅ Completo (Core & Servizi pronti) |
 | Controller | 🔜 Prossimo step |
 | Docker | 🔜 Da fare |
 | Test (JUnit 5) | 🔜 Da fare |
