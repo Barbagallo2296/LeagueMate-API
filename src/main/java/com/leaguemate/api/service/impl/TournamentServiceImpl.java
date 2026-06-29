@@ -2,6 +2,8 @@ package com.leaguemate.api.service.impl;
 
 import com.leaguemate.api.dto.StandingEntry;
 import com.leaguemate.api.entity.*;
+import com.leaguemate.api.exception.ResourceConflictException;
+import com.leaguemate.api.exception.ResourceNotFoundException;
 import com.leaguemate.api.repository.*;
 import com.leaguemate.api.service.TournamentService;
 import lombok.RequiredArgsConstructor;
@@ -32,7 +34,7 @@ public class TournamentServiceImpl implements TournamentService {
     @Override
     public Tournament getTournamentById(Long id) {
         return tournamentRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Tournament not found with id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Tournament not found with id: " + id));
     }
 
     @Override
@@ -49,13 +51,15 @@ public class TournamentServiceImpl implements TournamentService {
     @Transactional
     public TournamentRegistration registerTeamToTournament(Long tournamentId, Long teamId) {
         Tournament tournament = getTournamentById(tournamentId);
+
         Team team = teamRepository.findById(teamId)
-                .orElseThrow(() -> new RuntimeException("Team not found with id: " + teamId));
+                .orElseThrow(() -> new ResourceNotFoundException("Team not found with id: " + teamId));
 
         boolean alreadyRegistered = registrationRepository.findByTournamentId(tournamentId).stream()
                 .anyMatch(reg -> reg.getTeam().getId().equals(teamId));
+
         if (alreadyRegistered) {
-            throw new RuntimeException("Team is already registered to this tournament");
+            throw new ResourceConflictException("Team is already registered to this tournament");
         }
 
         TournamentRegistration registration = new TournamentRegistration();
@@ -78,7 +82,7 @@ public class TournamentServiceImpl implements TournamentService {
                 .collect(Collectors.toList());
 
         if (teams.size() < 2) {
-            throw new RuntimeException("Cannot generate rounds with less than 2 teams");
+            throw new ResourceConflictException("Cannot generate rounds with less than 2 teams");
         }
 
         if (teams.size() % 2 != 0) {
