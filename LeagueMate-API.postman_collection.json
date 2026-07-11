@@ -1,0 +1,383 @@
+{
+  "info": {
+    "_postman_id": "b3c4d5e6-a1b2-3c4d-5e6f-7a8b9c0d1e2f",
+    "name": "LeagueMate-API",
+    "description": "Collezione completa per l'esame ITS - Include gestione automatica del JWT Token.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Auth",
+      "item": [
+        {
+          "name": "POST Register",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"username\": \"manuel22\",\n    \"email\": \"manuel@leaguemate.com\",\n    \"password\": \"password123\",\n    \"firstName\": \"Manuel\",\n    \"lastName\": \"Barbagallo\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/register",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "if (response.token) {",
+                  "    pm.environment.set(\"jwt_token\", response.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"username\": \"manuel22\",\n    \"password\": \"password123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "auth": {
+        "type": "noauth"
+      }
+    },
+    {
+      "name": "2. Tournaments",
+      "item": [
+        {
+          "name": "POST Create Tournament",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Grand Line Cup\",\n    \"season\": \"2026/2027\",\n    \"pointsForWin\": 3,\n    \"pointsForDraw\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/tournaments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tournaments"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET All Tournaments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tournaments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tournaments"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET Tournament by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tournaments/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tournaments",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET Tournaments by Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tournaments/status/DRAFT",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tournaments",
+                "status",
+                "DRAFT"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST Register Team to Tournament",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tournaments/1/register-team/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tournaments",
+                "1",
+                "register-team",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST Generate Rounds",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tournaments/1/generate-rounds",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tournaments",
+                "1",
+                "generate-rounds"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET Tournament Standings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tournaments/1/standings",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tournaments",
+                "1",
+                "standings"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "3. Teams",
+      "item": [
+        {
+          "name": "POST Create Team",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Straw Hat FC\",\n    \"logoUrl\": \"https://images.com/luffy.png\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/teams",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "teams"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET All Teams",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/teams",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "teams"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET Team by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/teams/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "teams",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "4. Matches",
+      "item": [
+        {
+          "name": "GET Matches by Round ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/matches/round/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "matches",
+                "round",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Update Match Result",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"homeScore\": 3,\n    \"awayScore\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/matches/1/result",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "matches",
+                "1",
+                "result"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{jwt_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "jwt_token",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
