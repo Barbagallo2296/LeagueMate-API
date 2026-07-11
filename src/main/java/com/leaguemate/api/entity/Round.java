@@ -1,5 +1,6 @@
 package com.leaguemate.api.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -22,8 +23,9 @@ public class Round {
     private Long id;
 
     @Column(name = "round_number", nullable = false)
-    private int roundNumber; // Es. 1, 2, 3...
+    private int roundNumber;
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "tournament_id", nullable = false)
     private Tournament tournament;

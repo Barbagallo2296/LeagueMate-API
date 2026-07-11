@@ -1,0 +1,70 @@
+package com.leaguemate.api.controller;
+
+import com.leaguemate.api.dto.CreateTournamentRequest;
+import com.leaguemate.api.dto.StandingEntry;
+import com.leaguemate.api.entity.Tournament;
+import com.leaguemate.api.entity.TournamentRegistration;
+import com.leaguemate.api.entity.Round;
+import com.leaguemate.api.entity.TournamentStatus;
+import com.leaguemate.api.service.TournamentService;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/tournaments")
+@RequiredArgsConstructor
+public class TournamentController {
+
+    private final TournamentService tournamentService;
+
+    @PostMapping
+    public ResponseEntity<Tournament> createTournament(@Valid @RequestBody CreateTournamentRequest request) {
+        Tournament tournament = new Tournament();
+        tournament.setName(request.name());
+        tournament.setSeason(request.season());
+
+        Tournament created = tournamentService.createTournament(tournament);
+        return new ResponseEntity<>(created, HttpStatus.CREATED);
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<Tournament> getTournamentById(@PathVariable Long id) {
+        return ResponseEntity.ok(tournamentService.getTournamentById(id));
+    }
+
+    @GetMapping
+    public ResponseEntity<List<Tournament>> getAllTournaments() {
+        return ResponseEntity.ok(tournamentService.getAllTournaments());
+    }
+
+    @GetMapping("/status/{status}")
+    public ResponseEntity<List<Tournament>> getTournamentsByStatus(@PathVariable TournamentStatus status) {
+        return ResponseEntity.ok(tournamentService.getTournamentsByStatus(status));
+    }
+
+    @PostMapping("/{tournamentId}/register-team/{teamId}")
+    public ResponseEntity<TournamentRegistration> registerTeamToTournament(
+            @PathVariable Long tournamentId,
+            @PathVariable Long teamId
+    ) {
+        TournamentRegistration registration = tournamentService.registerTeamToTournament(tournamentId, teamId);
+        return new ResponseEntity<>(registration, HttpStatus.CREATED);
+    }
+
+    @PostMapping("/{tournamentId}/generate-rounds")
+    public ResponseEntity<List<Round>> generateRounds(@PathVariable Long tournamentId) {
+        List<Round> rounds = tournamentService.generateRounds(tournamentId);
+        return ResponseEntity.ok(rounds);
+    }
+
+    @GetMapping("/{tournamentId}/standings")
+    public ResponseEntity<List<StandingEntry>> calculateStandings(@PathVariable Long tournamentId) {
+        List<StandingEntry> standings = tournamentService.calculateStandings(tournamentId);
+        return ResponseEntity.ok(standings);
+    }
+}
