@@ -11,10 +11,10 @@
 | Java | 21 |
 | Spring Boot | 4.1.0 |
 | Spring Security | 7.x |
-| Spring Data JPA | — |
+| Spring Data JPA / Hibernate | 7.x |
 | MySQL | 8.x |
 | JWT (jjwt) | 0.12.6 |
-| Lombok | latest |
+| Lombok | 1.18.x |
 | Maven | 3.x |
 
 ---
@@ -69,7 +69,7 @@ src/main/java/com/leaguemate/api/
 ## Funzionalità principali
 
 ### Generazione calendario (Algoritmo di Berger)
-Il metodo `generateRounds()` in `TournamentServiceImpl` implementa l'algoritmo Round Robin di Berger per generare automaticamente le giornate di un girone all'italiana. Gestisce il numero dispari di squadre con un turno di riposo (`null` team) e alterna casa/trasferta ad ogni giornata.
+Il metodo `generateRounds()` in `TournamentServiceImpl` implementa l'algoritmo Round Robin di Berger per generare automaticamente le giornate di un girone all'italiana. Gestisce il numero dispari di squadre con un turno di riposo e alterna casa/trasferta ad ogni giornata.
 
 ### Calcolo classifica dinamico (Stream API)
 Il metodo `calculateStandings()` calcola la classifica in tempo reale leggendo le partite con stato `COMPLETED` tramite Stream API:
@@ -85,21 +85,13 @@ return statsMap.entrySet().stream()
     .collect(Collectors.toList());
 ```
 
-Criteri di ordinamento:
-1. Punti (decrescente)
-2. Differenza reti (decrescente)
+Criteri di ordinamento: punti (decrescente) → differenza reti (decrescente).
 
 ### DTO — `StandingEntry` (Java Record)
 ```java
 public record StandingEntry(
-    String teamName,
-    int points,
-    int wins,
-    int draws,
-    int losses,
-    int goalsFor,
-    int goalsAgainst,
-    int goalDifference
+    String teamName, int points, int wins, int draws,
+    int losses, int goalsFor, int goalsAgainst, int goalDifference
 ) {}
 ```
 
@@ -108,8 +100,7 @@ public record StandingEntry(
 ## Sicurezza
 
 - Autenticazione **stateless** con JWT (nessun cookie di sessione)
-- Token firmato con algoritmo **HS256**
-- Scadenza configurabile via `application.properties`
+- Token firmato con algoritmo **HS256**, scadenza 24h configurabile
 - Filtro `JwtAuthFilter` intercetta ogni richiesta e valida il token
 - Ruoli gestiti tramite `@PreAuthorize` abilitato con `@EnableMethodSecurity`
 - Password hashate con **BCrypt**
@@ -121,7 +112,6 @@ POST /api/auth/login
 ```
 
 ### Endpoint protetti
-Tutti gli endpoint sotto `/api/**` richiedono un token JWT valido nell'header:
 ```
 Authorization: Bearer <token>
 ```
@@ -178,19 +168,14 @@ Gestione centralizzata tramite `@RestControllerAdvice`:
 ## Avvio in locale
 
 ### Prerequisiti
-- Java 21
-- Maven 3.x
-- MySQL 8.x
+- Java 21, Maven 3.x, MySQL 8.x
 
-### Configurazione database
-Crea un database MySQL chiamato `leaguemate_db` oppure lascia che Spring lo crei automaticamente grazie a `createDatabaseIfNotExist=true` nell'URL.
-
-### Variabili in `application.properties`
+### Configurazione `application.properties`
 ```properties
 spring.datasource.url=jdbc:mysql://localhost:3306/leaguemate_db?createDatabaseIfNotExist=true
 spring.datasource.username=root
-spring.datasource.password=root
-jwt.secret=<chiave-segreta-Base64-min-32-caratteri>
+spring.datasource.password=TUA_PASSWORD
+jwt.secret=<chiave-Base64-min-32-caratteri>
 jwt.expiration=86400000
 ```
 
@@ -207,7 +192,20 @@ mvn spring-boot:run
 docker-compose up --build
 ```
 
-> Sezione in arrivo con Dockerfile e docker-compose.yml
+Avvia automaticamente MySQL e l'applicazione Spring Boot con un solo comando.
+
+---
+
+## Testing
+
+14 test unitari con JUnit 5 e Mockito — tutti verdi ✅
+
+| Classe testata | Test |
+|---|---|
+| `UserServiceImpl` | 5 test (registrazione, duplicati, findByUsername) |
+| `TournamentServiceImpl` | 3 test (creazione, recupero, not found) |
+| `TeamServiceImpl` | 4 test (creazione, unicità nome, recupero) |
+| `MatchServiceImpl` | 2 test (aggiornamento risultato, not found) |
 
 ---
 
@@ -220,10 +218,10 @@ docker-compose up --build
 | Service | ✅ Completo |
 | Security (JWT) | ✅ Completo |
 | Controller | ✅ Completo |
-| Docker | 🔜 Da fare |
-| Test (JUnit 5) | 🔜 Da fare |
-| Script SQL | 🔜 Da fare |
-| Postman Collection | 🔜 Da fare |
+| Docker | ✅ Completo |
+| Test (JUnit 5) | ✅ Completo — 14/14 verdi |
+| Script SQL | ✅ Completo |
+| Postman Collection | ✅ Completo |
 | Relazione tecnica | 🔜 Da fare |
 
 ---
