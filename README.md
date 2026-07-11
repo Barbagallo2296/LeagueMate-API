@@ -10,8 +10,8 @@
 |---|---|
 | Java | 21 |
 | Spring Boot | 4.1.0 |
-| Spring Security | 7.1.0 |
-| Spring Data JPA | 2026.0.0 |
+| Spring Security | 7.x |
+| Spring Data JPA | — |
 | MySQL | 8.x |
 | JWT (jjwt) | 0.12.6 |
 | Lombok | latest |
@@ -30,7 +30,7 @@ Controller → Service (interfaccia + impl) → Repository
 ```
 src/main/java/com/leaguemate/api/
 │
-├── controller/          # Endpoint REST (in sviluppo)
+├── controller/          # Endpoint REST
 ├── service/             # Interfacce di business logic
 │   └── impl/            # Implementazioni concrete
 ├── repository/          # Interfacce Spring Data JPA
@@ -136,7 +136,42 @@ Gestione centralizzata tramite `@RestControllerAdvice`:
 |---|---|
 | `ResourceNotFoundException` | `404 Not Found` |
 | `ResourceConflictException` | `409 Conflict` |
+| `MethodArgumentNotValidException` | `400 Bad Request` |
 | `Exception` (fallback) | `500 Internal Server Error` |
+
+---
+
+## Endpoint REST
+
+### Auth
+| Metodo | Endpoint | Accesso | Descrizione |
+|---|---|---|---|
+| POST | `/api/auth/register` | Pubblico | Registra un nuovo utente |
+| POST | `/api/auth/login` | Pubblico | Login e generazione token JWT |
+
+### Tornei
+| Metodo | Endpoint | Accesso | Descrizione |
+|---|---|---|---|
+| POST | `/api/tournaments` | Autenticato | Crea un nuovo torneo |
+| GET | `/api/tournaments` | Autenticato | Lista tutti i tornei |
+| GET | `/api/tournaments/{id}` | Autenticato | Dettaglio torneo |
+| GET | `/api/tournaments/status/{status}` | Autenticato | Filtra per stato |
+| POST | `/api/tournaments/{id}/register-team/{teamId}` | Autenticato | Iscrive una squadra |
+| POST | `/api/tournaments/{id}/generate-rounds` | Autenticato | Genera il calendario |
+| GET | `/api/tournaments/{id}/standings` | Autenticato | Classifica dinamica |
+
+### Squadre
+| Metodo | Endpoint | Accesso | Descrizione |
+|---|---|---|---|
+| POST | `/api/teams` | Autenticato | Crea una squadra |
+| GET | `/api/teams` | Autenticato | Lista tutte le squadre |
+| GET | `/api/teams/{id}` | Autenticato | Dettaglio squadra |
+
+### Partite
+| Metodo | Endpoint | Accesso | Descrizione |
+|---|---|---|---|
+| PUT | `/api/matches/{id}/result` | Autenticato | Inserisce il risultato |
+| GET | `/api/matches/round/{roundId}` | Autenticato | Partite di una giornata |
 
 ---
 
@@ -155,7 +190,7 @@ Crea un database MySQL chiamato `leaguemate_db` oppure lascia che Spring lo crei
 spring.datasource.url=jdbc:mysql://localhost:3306/leaguemate_db?createDatabaseIfNotExist=true
 spring.datasource.username=root
 spring.datasource.password=root
-jwt.secret=<chiave-segreta-min-32-caratteri>
+jwt.secret=<chiave-segreta-Base64-min-32-caratteri>
 jwt.expiration=86400000
 ```
 
@@ -166,6 +201,16 @@ mvn spring-boot:run
 
 ---
 
+## Avvio con Docker
+
+```bash
+docker-compose up --build
+```
+
+> Sezione in arrivo con Dockerfile e docker-compose.yml
+
+---
+
 ## Stato del progetto
 
 | Layer | Stato |
@@ -173,11 +218,13 @@ mvn spring-boot:run
 | Entity | ✅ Completo |
 | Repository | ✅ Completo |
 | Service | ✅ Completo |
-| Security (JWT) | ✅ Completo (Core & Servizi pronti) |
-| Controller | 🔜 Prossimo step |
+| Security (JWT) | ✅ Completo |
+| Controller | ✅ Completo |
 | Docker | 🔜 Da fare |
 | Test (JUnit 5) | 🔜 Da fare |
-| Documentazione Postman | 🔜 Da fare |
+| Script SQL | 🔜 Da fare |
+| Postman Collection | 🔜 Da fare |
+| Relazione tecnica | 🔜 Da fare |
 
 ---
 
@@ -185,4 +232,4 @@ mvn spring-boot:run
 
 **Manuel Barbagallo**  
 ITS Prodigi — Full Stack Developer (2025–2027)  
-[GitHub](https://github.com/Barbagallo2296)
+[GitHub](https://github.com/Barbagallo2296) | [LinkedIn](https://linkedin.com/in/manuel-barbagallo/)

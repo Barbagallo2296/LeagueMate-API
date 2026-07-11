@@ -3,8 +3,6 @@ package com.leaguemate.api.controller;
 import com.leaguemate.api.dto.CreateTournamentRequest;
 import com.leaguemate.api.dto.StandingEntry;
 import com.leaguemate.api.entity.Tournament;
-import com.leaguemate.api.entity.TournamentRegistration;
-import com.leaguemate.api.entity.Round;
 import com.leaguemate.api.entity.TournamentStatus;
 import com.leaguemate.api.service.TournamentService;
 import jakarta.validation.Valid;
@@ -27,7 +25,6 @@ public class TournamentController {
         Tournament tournament = new Tournament();
         tournament.setName(request.name());
         tournament.setSeason(request.season());
-
         Tournament created = tournamentService.createTournament(tournament);
         return new ResponseEntity<>(created, HttpStatus.CREATED);
     }
@@ -48,18 +45,18 @@ public class TournamentController {
     }
 
     @PostMapping("/{tournamentId}/register-team/{teamId}")
-    public ResponseEntity<TournamentRegistration> registerTeamToTournament(
+    public ResponseEntity<Void> registerTeamToTournament(
             @PathVariable Long tournamentId,
             @PathVariable Long teamId
     ) {
-        TournamentRegistration registration = tournamentService.registerTeamToTournament(tournamentId, teamId);
-        return new ResponseEntity<>(registration, HttpStatus.CREATED);
+        tournamentService.registerTeamToTournament(tournamentId, teamId);
+        return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 
     @PostMapping("/{tournamentId}/generate-rounds")
-    public ResponseEntity<List<Round>> generateRounds(@PathVariable Long tournamentId) {
-        List<Round> rounds = tournamentService.generateRounds(tournamentId);
-        return ResponseEntity.ok(rounds);
+    public ResponseEntity<Void> generateRounds(@PathVariable Long tournamentId) {
+        tournamentService.generateRounds(tournamentId);
+        return ResponseEntity.ok().build();
     }
 
     @GetMapping("/{tournamentId}/standings")
