@@ -15,6 +15,7 @@
 | MySQL | 8.x |
 | JWT (jjwt) | 0.12.6 |
 | Lombok | 1.18.x |
+| JaCoCo | 0.8.12 |
 | Maven | 3.x |
 
 ---
@@ -69,19 +70,16 @@ src/main/java/com/leaguemate/api/
 ## Funzionalità principali
 
 ### Generazione calendario (Algoritmo di Berger)
-Il metodo `generateRounds()` in `TournamentServiceImpl` implementa l'algoritmo Round Robin di Berger per generare automaticamente le giornate di un girone all'italiana. Gestisce il numero dispari di squadre con un turno di riposo e alterna casa/trasferta ad ogni giornata.
+Il metodo `generateRounds()` in `TournamentServiceImpl` implementa l'algoritmo Round Robin di Berger per generare automaticamente le giornate di un girone all'italiana. Gestisce il numero dispari di squadre con un turno di riposo e alterna casa/trasferta ad ogni giornata. Con N squadre genera N-1 giornate da N/2 partite ciascuna.
 
 ### Calcolo classifica dinamico (Stream API)
-Il metodo `calculateStandings()` calcola la classifica in tempo reale leggendo le partite con stato `COMPLETED` tramite Stream API:
+Il metodo `calculateStandings()` calcola la classifica in tempo reale leggendo le partite con stato `COMPLETED` tramite Stream API. La classifica non è persistita sul database, evitando rischi di disallineamento.
 
 ```java
-matchRepository.findByRoundTournamentIdAndStatus(tournamentId, MatchStatus.COMPLETED)
-    .forEach(match -> { /* aggiorna statistiche */ });
-
 return statsMap.entrySet().stream()
     .map(entry -> new StandingEntry(...))
     .sorted(Comparator.comparingInt(StandingEntry::points).reversed()
-        .thenComparingInt(StandingEntry::goalDifference).reversed())
+        .thenComparing(Comparator.comparingInt(StandingEntry::goalDifference).reversed()))
     .collect(Collectors.toList());
 ```
 
@@ -102,8 +100,8 @@ public record StandingEntry(
 - Autenticazione **stateless** con JWT (nessun cookie di sessione)
 - Token firmato con algoritmo **HS256**, scadenza 24h configurabile
 - Filtro `JwtAuthFilter` intercetta ogni richiesta e valida il token
-- Ruoli gestiti tramite `@PreAuthorize` abilitato con `@EnableMethodSecurity`
 - Password hashate con **BCrypt**
+- Autorizzazione basata su ruoli tramite `@PreAuthorize` e `@EnableMethodSecurity`
 
 ### Endpoint pubblici
 ```
@@ -142,12 +140,12 @@ Gestione centralizzata tramite `@RestControllerAdvice`:
 ### Tornei
 | Metodo | Endpoint | Accesso | Descrizione |
 |---|---|---|---|
-| POST | `/api/tournaments` | Autenticato | Crea un nuovo torneo |
+| POST | `/api/tournaments` | **ADMIN / ORGANIZER** | Crea un nuovo torneo |
 | GET | `/api/tournaments` | Autenticato | Lista tutti i tornei |
 | GET | `/api/tournaments/{id}` | Autenticato | Dettaglio torneo |
 | GET | `/api/tournaments/status/{status}` | Autenticato | Filtra per stato |
-| POST | `/api/tournaments/{id}/register-team/{teamId}` | Autenticato | Iscrive una squadra |
-| POST | `/api/tournaments/{id}/generate-rounds` | Autenticato | Genera il calendario |
+| POST | `/api/tournaments/{id}/register-team/{teamId}` | **ADMIN / ORGANIZER** | Iscrive una squadra |
+| POST | `/api/tournaments/{id}/generate-rounds` | **ADMIN / ORGANIZER** | Genera il calendario |
 | GET | `/api/tournaments/{id}/standings` | Autenticato | Classifica dinamica |
 
 ### Squadre
@@ -160,7 +158,7 @@ Gestione centralizzata tramite `@RestControllerAdvice`:
 ### Partite
 | Metodo | Endpoint | Accesso | Descrizione |
 |---|---|---|---|
-| PUT | `/api/matches/{id}/result` | Autenticato | Inserisce il risultato |
+| PUT | `/api/matches/{id}/result` | **ADMIN / ORGANIZER** | Inserisce il risultato |
 | GET | `/api/matches/round/{roundId}` | Autenticato | Partite di una giornata |
 
 ---
@@ -192,20 +190,51 @@ mvn spring-boot:run
 docker-compose up --build
 ```
 
-Avvia automaticamente MySQL e l'applicazione Spring Boot con un solo comando.
+Avvia automaticamente MySQL 8 e l'applicazione Spring Boot con un solo comando. Il Dockerfile usa un multi-stage build (Maven per la compilazione, JRE Alpine per l'esecuzione).
 
 ---
 
 ## Testing
 
-14 test unitari con JUnit 5 e Mockito — tutti verdi ✅
+**29 test unitari** con JUnit 5 e Mockito — tutti verdi ✅
+**Code coverage: 75%** (misurata con JaCoCo, requisito minimo 35%)
 
-| Classe testata | Test |
+| Classe testata | Test | Descrizione |
+|---|---|---|
+| `UserServiceImpl` | 5 | Registrazione, duplicati email/username, findByUsername |
+| `TournamentServiceImpl` | 7 | CRUD, **algoritmo di Berger**, **calcolo classifica** |
+| `TeamServiceImpl` | 4 | Creazione, unicità nome, recupero |
+| `MatchServiceImpl` | 2 | Aggiornamento risultato, not found |
+| `AuthServiceImpl` | 3 | Registrazione con hashing, login, generazione token |
+| `JwtService` | 4 | Generazione token, estrazione username, validazione |
+| `GlobalExceptionHandler` | 4 | 404, 409, 400, 500 |
+
+### Coverage per package
+
+| Package | Coverage |
 |---|---|
-| `UserServiceImpl` | 5 test (registrazione, duplicati, findByUsername) |
-| `TournamentServiceImpl` | 3 test (creazione, recupero, not found) |
-| `TeamServiceImpl` | 4 test (creazione, unicità nome, recupero) |
-| `MatchServiceImpl` | 2 test (aggiornamento risultato, not found) |
+| `exception` | 100% |
+| `service.impl` | 78% |
+| `security` | 45% |
+| **Totale** | **75%** |
+
+### Esecuzione test
+```bash
+mvn clean test
+```
+Il report JaCoCo viene generato in `target/site/jacoco/index.html`.
+
+---
+
+## Deliverables
+
+| Elemento | Stato |
+|---|---|
+| Codice sorgente completo | ✅ |
+| Script SQL (`schema.sql` + `data.sql`) | ✅ |
+| Collection Postman | ✅ |
+| Script Docker (`Dockerfile` + `docker-compose.yml`) | ✅ |
+| Relazione tecnica | ✅ |
 
 ---
 
@@ -216,13 +245,13 @@ Avvia automaticamente MySQL e l'applicazione Spring Boot con un solo comando.
 | Entity | ✅ Completo |
 | Repository | ✅ Completo |
 | Service | ✅ Completo |
-| Security (JWT) | ✅ Completo |
+| Security (JWT + RBAC) | ✅ Completo |
 | Controller | ✅ Completo |
 | Docker | ✅ Completo |
-| Test (JUnit 5) | ✅ Completo — 14/14 verdi |
+| Test (JUnit 5 + Mockito) | ✅ 29/29 verdi — coverage 75% |
 | Script SQL | ✅ Completo |
 | Postman Collection | ✅ Completo |
-| Relazione tecnica | 🔜 Da fare |
+| Relazione tecnica | ✅ Completo |
 
 ---
 
