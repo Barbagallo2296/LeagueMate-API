@@ -9,6 +9,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -21,6 +22,7 @@ public class TournamentController {
     private final TournamentService tournamentService;
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'ORGANIZER')")
     public ResponseEntity<Tournament> createTournament(@Valid @RequestBody CreateTournamentRequest request) {
         Tournament tournament = new Tournament();
         tournament.setName(request.name());
@@ -45,6 +47,7 @@ public class TournamentController {
     }
 
     @PostMapping("/{tournamentId}/register-team/{teamId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ORGANIZER')")
     public ResponseEntity<Void> registerTeamToTournament(
             @PathVariable Long tournamentId,
             @PathVariable Long teamId
@@ -54,6 +57,7 @@ public class TournamentController {
     }
 
     @PostMapping("/{tournamentId}/generate-rounds")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ORGANIZER')")
     public ResponseEntity<Void> generateRounds(@PathVariable Long tournamentId) {
         tournamentService.generateRounds(tournamentId);
         return ResponseEntity.ok().build();

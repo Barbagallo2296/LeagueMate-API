@@ -6,6 +6,7 @@ import com.leaguemate.api.service.MatchService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -18,6 +19,7 @@ public class MatchController {
     private final MatchService matchService;
 
     @PutMapping("/{id}/result")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ORGANIZER')")
     public ResponseEntity<Match> updateMatchResult(
             @PathVariable Long id,
             @Valid @RequestBody UpdateMatchResultRequest request

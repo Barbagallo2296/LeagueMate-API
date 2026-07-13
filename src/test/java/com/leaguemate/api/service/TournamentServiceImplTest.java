@@ -6,7 +6,7 @@ import com.leaguemate.api.exception.ResourceNotFoundException;
 import com.leaguemate.api.repository.TournamentRepository;
 import com.leaguemate.api.repository.TournamentRegistrationRepository;
 import com.leaguemate.api.repository.TeamRepository;
-import com.leaguemate.api.repository.MatchRepository; // Import corretto aggiunto
+import com.leaguemate.api.repository.MatchRepository;
 import com.leaguemate.api.service.impl.TournamentServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,6 +15,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -31,7 +32,7 @@ class TournamentServiceImplTest {
     @Mock
     private TeamRepository teamRepository;
     @Mock
-    private MatchRepository matchRepository; // Sostituito al posto di RoundRepository
+    private MatchRepository matchRepository;
 
     @InjectMocks
     private TournamentServiceImpl tournamentService;
@@ -72,5 +73,37 @@ class TournamentServiceImplTest {
         when(tournamentRepository.findById(99L)).thenReturn(Optional.empty());
 
         assertThrows(ResourceNotFoundException.class, () -> tournamentService.getTournamentById(99L));
+    }
+
+    @Test
+    void getAllTournaments_ReturnsList() {
+        Tournament t2 = new Tournament();
+        t2.setId(2L);
+        t2.setName("Europa League");
+        List<Tournament> mockList = List.of(tournament, t2);
+
+        when(tournamentRepository.findAll()).thenReturn(mockList);
+
+        List<Tournament> result = tournamentService.getAllTournaments();
+
+        assertNotNull(result);
+        assertEquals(2, result.size());
+        verify(tournamentRepository, times(1)).findAll();
+    }
+
+    @Test
+    void getTournamentsByStatus_ReturnsFilteredList() {
+        TournamentStatus targetStatus = TournamentStatus.ACTIVE;
+        tournament.setStatus(targetStatus);
+        List<Tournament> mockList = List.of(tournament);
+
+        when(tournamentRepository.findByStatus(targetStatus)).thenReturn(mockList);
+
+        List<Tournament> result = tournamentService.getTournamentsByStatus(targetStatus);
+
+        assertNotNull(result);
+        assertFalse(result.isEmpty());
+        assertEquals(targetStatus, result.get(0).getStatus());
+        verify(tournamentRepository, times(1)).findByStatus(targetStatus);
     }
 }
