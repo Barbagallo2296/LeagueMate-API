@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "b3c4d5e6-a1b2-3c4d-5e6f-7a8b9c0d1e2f",
     "name": "LeagueMate-API",
-    "description": "Collezione completa per l'esame ITS - Include gestione automatica del JWT Token.",
+    "description": "Collezione completa per il Project Work UF14 - Include gestione automatica del JWT Token.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -94,7 +94,7 @@
             "header": [],
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"name\": \"Grand Line Cup\",\n    \"season\": \"2026/2027\",\n    \"pointsForWin\": 3,\n    \"pointsForDraw\": 1\n}",
+              "raw": "{\n    \"name\": \"Grand Line Cup\",\n    \"season\": \"2026/2027\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -231,6 +231,73 @@
             }
           },
           "response": []
+        },
+        {
+          "name": "PUT Update Tournament",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Grand Line Cup - Updated\",\n    \"season\": \"2026/2027\",\n    \"pointsForWin\": 3,\n    \"pointsForDraw\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/tournaments/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tournaments",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE Tournament",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tournaments/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tournaments",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET Tournament Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tournaments/1/stats",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tournaments",
+                "1",
+                "stats"
+              ]
+            }
+          },
+          "response": []
         }
       ]
     },
@@ -300,6 +367,53 @@
             }
           },
           "response": []
+        },
+        {
+          "name": "PUT Update Team",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Straw Hat FC Updated\",\n    \"logoUrl\": \"https://images.com/luffy-new.png\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/teams/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "teams",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE Team",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/teams/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "teams",
+                "1"
+              ]
+            }
+          },
+          "response": []
         }
       ]
     },
@@ -350,6 +464,148 @@
                 "matches",
                 "1",
                 "result"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "5. Team Members",
+      "item": [
+        {
+          "name": "POST Add Team Member",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"userId\": 1,\n    \"teamRole\": \"CAPTAIN\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/teams/1/members",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "teams",
+                "1",
+                "members"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET Team Members",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/teams/1/members",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "teams",
+                "1",
+                "members"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE Remove Team Member",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/teams/1/members/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "teams",
+                "1",
+                "members",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "6. Tournament Organizers (ManyToMany)",
+      "item": [
+        {
+          "name": "POST Add Organizer",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tournaments/1/organizers/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tournaments",
+                "1",
+                "organizers",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET Tournament Organizers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tournaments/1/organizers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tournaments",
+                "1",
+                "organizers"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE Remove Organizer",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tournaments/1/organizers/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tournaments",
+                "1",
+                "organizers",
+                "1"
               ]
             }
           },

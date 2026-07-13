@@ -22,7 +22,7 @@
 
 ## Architettura
 
-L'applicazione segue una struttura MVC a tre layer rigorosi:
+Struttura MVC a tre layer rigorosi:
 
 ```
 Controller → Service (interfaccia + impl) → Repository
@@ -36,44 +36,70 @@ src/main/java/com/leaguemate/api/
 │   └── impl/            # Implementazioni concrete
 ├── repository/          # Interfacce Spring Data JPA
 ├── entity/              # Entity JPA mappate su MySQL
-├── dto/                 # Java Records come DTO
+├── dto/                 # Java Records come DTO (input e output)
 ├── security/            # JWT Filter, UserDetails, SecurityConfig
 └── exception/           # Eccezioni custom + GlobalExceptionHandler
 ```
 
+### Moduli funzionali
+
+| Modulo | Controller | Service | Descrizione |
+|---|---|---|---|
+| **Auth** | `AuthController` | `AuthService` | Registrazione e login con JWT |
+| **Tournament** | `TournamentController` | `TournamentService` | CRUD tornei, iscrizioni, calendario, classifica, statistiche, co-organizzatori |
+| **Team** | `TeamController` | `TeamService` | CRUD squadre |
+| **TeamMember** | `TeamMemberController` | `TeamMemberService` | Membri delle squadre con ruoli |
+| **Match** | `MatchController` | `MatchService` | Risultati delle partite |
+
+> **Nessuna Entity JPA viene esposta nelle risposte API.** Tutti i controller restituiscono esclusivamente DTO (Java Records), isolando completamente il modello di persistenza dal contratto REST.
+
 ---
 
-## Modello del Dominio
+## Data Layer
 
-### Relazioni JPA implementate
+### Relazioni JPA — tutte e quattro le tipologie
 
-| Tipo | Entità |
-|---|---|
-| `@OneToOne` | `User` ↔ `UserProfile` |
-| `@OneToMany / @ManyToOne` | `Tournament` → `Round` → `Match` |
-| `@ManyToMany` (ricca) | `User` ↔ `Team` tramite `TeamMember` |
-| `@ManyToMany` (ricca) | `Tournament` ↔ `Team` tramite `TournamentRegistration` |
+| Tipo | Entità | Note |
+|---|---|---|
+| `@OneToOne` | `User` ↔ `UserProfile` | FK su `UserProfile` |
+| `@ManyToOne / @OneToMany` | `Tournament` → `Round` → `Match` | Tutte LAZY |
+| `@ManyToMany` **pura** | `Tournament` ↔ `User` (co-organizzatori) | `@JoinTable` su `tournament_organizers` — la relazione non porta attributi propri |
+| `@ManyToMany` **con giunzione ricca** | `User` ↔ `Team` tramite `TeamMember` | Attributi: `teamRole`, `joinedAt` |
+| `@ManyToMany` **con giunzione ricca** | `Tournament` ↔ `Team` tramite `TournamentRegistration` | Attributi: `status`, `registeredAt` |
+
+**Scelta progettuale:** dove la relazione N:N porta attributi propri si usa un'entità di giunzione (modellazione corretta); dove non ne porta si usa `@ManyToMany` pura con `@JoinTable`.
+
+### Elementi avanzati JPA
+
+| Elemento | Dove | Perché |
+|---|---|---|
+| `FetchType.LAZY` | Tutte le relazioni `@ManyToOne` e `@ManyToMany` | Evita query non necessarie |
+| **JPQL con `@Query` + `@Param`** | `MatchRepository`, `TournamentRepository`, `TournamentRegistrationRepository` | Query esplicite e type-safe |
+| **`JOIN FETCH`** | `findCompletedMatchesWithTeams()`, `findByRoundIdWithTeams()`, `findConfirmedWithTeams()` | **Risolve un problema N+1 reale** nel calcolo della classifica |
+| **Query di aggregazione (`COUNT`)** | `countMatchesByTournamentAndStatus()`, `countConfirmedTeams()` | Statistiche del torneo |
+| **JOIN su `@ManyToMany`** | `findTournamentsByOrganizerId()` | Naviga la relazione N:N in JPQL |
+| **`@EntityGraph`** | `findWithRegistrationsById()` | Fetch dichiarativo senza JPQL |
 
 ### Entity
 
-- **User** — implementa `UserDetails`, autenticazione via username, ruoli enum (`ADMIN`, `ORGANIZER`, `USER`)
-- **UserProfile** — dati aggiuntivi collegati all'utente (bio, avatar, telefono)
-- **Team** — squadra con membri e iscrizioni ai tornei
-- **TeamMember** — giunzione ricca User↔Team con `TeamRole` (CAPTAIN, PLAYER, RESERVE) e `joinedAt`
-- **Tournament** — torneo con stagione, stato e configurazione punti (vittoria/pareggio)
+- **User** — implementa `UserDetails`, ruoli enum (`ADMIN`, `ORGANIZER`, `USER`)
+- **UserProfile** — dati aggiuntivi (bio, avatar, telefono)
+- **Team** — squadra con membri e iscrizioni
+- **TeamMember** — giunzione ricca User↔Team con `TeamRole` (CAPTAIN/PLAYER/RESERVE) e `joinedAt`
+- **Tournament** — torneo con stagione, stato, configurazione punti e **co-organizzatori**
 - **TournamentRegistration** — giunzione ricca Tournament↔Team con `RegistrationStatus` e `registeredAt`
-- **Round** — giornata del torneo, ordinata per `roundNumber`
-- **Match** — partita con squadra casa/trasferta, score e stato (SCHEDULED/COMPLETED)
+- **Round** — giornata del torneo
+- **Match** — partita con squadra casa/trasferta, score e stato
 
 ---
 
 ## Funzionalità principali
 
 ### Generazione calendario (Algoritmo di Berger)
-Il metodo `generateRounds()` in `TournamentServiceImpl` implementa l'algoritmo Round Robin di Berger per generare automaticamente le giornate di un girone all'italiana. Gestisce il numero dispari di squadre con un turno di riposo e alterna casa/trasferta ad ogni giornata. Con N squadre genera N-1 giornate da N/2 partite ciascuna.
+`generateRounds()` implementa l'algoritmo Round Robin di Berger. Con N squadre genera N-1 giornate da N/2 partite. Gestisce il numero dispari con un turno di riposo e alterna casa/trasferta.
 
-### Calcolo classifica dinamico (Stream API)
-Il metodo `calculateStandings()` calcola la classifica in tempo reale leggendo le partite con stato `COMPLETED` tramite Stream API. La classifica non è persistita sul database, evitando rischi di disallineamento.
+### Calcolo classifica dinamico (Stream API + JOIN FETCH)
+`calculateStandings()` calcola la classifica in tempo reale dalle partite `COMPLETED`, senza persisterla (nessun rischio di disallineamento). Usa JPQL con `JOIN FETCH` per caricare squadre e partite in un'unica query.
 
 ```java
 return statsMap.entrySet().stream()
@@ -83,92 +109,109 @@ return statsMap.entrySet().stream()
     .collect(Collectors.toList());
 ```
 
-Criteri di ordinamento: punti (decrescente) → differenza reti (decrescente).
+### Statistiche del torneo
+`getTournamentStats()` aggrega dati con query `COUNT` JPQL: squadre iscritte, partite giocate/rimanenti, gol totali, media gol a partita, miglior attacco.
 
-### DTO — `StandingEntry` (Java Record)
-```java
-public record StandingEntry(
-    String teamName, int points, int wins, int draws,
-    int losses, int goalsFor, int goalsAgainst, int goalDifference
-) {}
-```
+### Validazioni di dominio
+- Le squadre possono essere iscritte **solo a tornei in stato `DRAFT`**
+- Un torneo `COMPLETED` non può essere modificato
+- Un torneo `ACTIVE` non può essere eliminato
+- Una squadra iscritta a un torneo non può essere eliminata
 
 ---
 
 ## Sicurezza
 
-- Autenticazione **stateless** con JWT (nessun cookie di sessione)
-- Token firmato con algoritmo **HS256**, scadenza 24h configurabile
-- Filtro `JwtAuthFilter` intercetta ogni richiesta e valida il token
+- Autenticazione **stateless** con JWT (HS256, scadenza 24h)
+- Filtro `JwtAuthFilter` valida il token ad ogni richiesta
 - Password hashate con **BCrypt**
-- Autorizzazione basata su ruoli tramite `@PreAuthorize` e `@EnableMethodSecurity`
-
-### Endpoint pubblici
-```
-POST /api/auth/register
-POST /api/auth/login
-```
-
-### Endpoint protetti
-```
-Authorization: Bearer <token>
-```
+- Autorizzazione per ruoli (RBAC) tramite `@PreAuthorize` e `@EnableMethodSecurity`
+- Handler dedicato per `AccessDeniedException` → `403 Forbidden`
 
 ---
 
 ## Gestione Errori
 
-Gestione centralizzata tramite `@RestControllerAdvice`:
+`@RestControllerAdvice` centralizzato:
 
 | Eccezione | HTTP Status |
 |---|---|
+| `MethodArgumentNotValidException` | `400 Bad Request` |
+| `AccessDeniedException` | `403 Forbidden` |
 | `ResourceNotFoundException` | `404 Not Found` |
 | `ResourceConflictException` | `409 Conflict` |
-| `MethodArgumentNotValidException` | `400 Bad Request` |
 | `Exception` (fallback) | `500 Internal Server Error` |
 
 ---
 
-## Endpoint REST
+## Endpoint REST — 25 totali
 
-### Auth
-| Metodo | Endpoint | Accesso | Descrizione |
-|---|---|---|---|
-| POST | `/api/auth/register` | Pubblico | Registra un nuovo utente |
-| POST | `/api/auth/login` | Pubblico | Login e generazione token JWT |
+### Auth (2)
+| Metodo | Endpoint | Accesso |
+|---|---|---|
+| POST | `/api/auth/register` | Pubblico |
+| POST | `/api/auth/login` | Pubblico |
 
-### Tornei
-| Metodo | Endpoint | Accesso | Descrizione |
-|---|---|---|---|
-| POST | `/api/tournaments` | **ADMIN / ORGANIZER** | Crea un nuovo torneo |
-| GET | `/api/tournaments` | Autenticato | Lista tutti i tornei |
-| GET | `/api/tournaments/{id}` | Autenticato | Dettaglio torneo |
-| GET | `/api/tournaments/status/{status}` | Autenticato | Filtra per stato |
-| POST | `/api/tournaments/{id}/register-team/{teamId}` | **ADMIN / ORGANIZER** | Iscrive una squadra |
-| POST | `/api/tournaments/{id}/generate-rounds` | **ADMIN / ORGANIZER** | Genera il calendario |
-| GET | `/api/tournaments/{id}/standings` | Autenticato | Classifica dinamica |
+### Tornei (10)
+| Metodo | Endpoint | Accesso |
+|---|---|---|
+| POST | `/api/tournaments` | **ADMIN / ORGANIZER** |
+| GET | `/api/tournaments` | Autenticato |
+| GET | `/api/tournaments/{id}` | Autenticato |
+| GET | `/api/tournaments/status/{status}` | Autenticato |
+| PUT | `/api/tournaments/{id}` | **ADMIN / ORGANIZER** |
+| DELETE | `/api/tournaments/{id}` | **ADMIN** |
+| POST | `/api/tournaments/{id}/register-team/{teamId}` | **ADMIN / ORGANIZER** |
+| POST | `/api/tournaments/{id}/generate-rounds` | **ADMIN / ORGANIZER** |
+| GET | `/api/tournaments/{id}/standings` | Autenticato |
+| GET | `/api/tournaments/{id}/stats` | Autenticato |
 
-### Squadre
-| Metodo | Endpoint | Accesso | Descrizione |
-|---|---|---|---|
-| POST | `/api/teams` | Autenticato | Crea una squadra |
-| GET | `/api/teams` | Autenticato | Lista tutte le squadre |
-| GET | `/api/teams/{id}` | Autenticato | Dettaglio squadra |
+### Co-organizzatori — `@ManyToMany` (3)
+| Metodo | Endpoint | Accesso |
+|---|---|---|
+| POST | `/api/tournaments/{id}/organizers/{userId}` | **ADMIN / ORGANIZER** |
+| GET | `/api/tournaments/{id}/organizers` | Autenticato |
+| DELETE | `/api/tournaments/{id}/organizers/{userId}` | **ADMIN / ORGANIZER** |
 
-### Partite
-| Metodo | Endpoint | Accesso | Descrizione |
-|---|---|---|---|
-| PUT | `/api/matches/{id}/result` | **ADMIN / ORGANIZER** | Inserisce il risultato |
-| GET | `/api/matches/round/{roundId}` | Autenticato | Partite di una giornata |
+### Squadre (5)
+| Metodo | Endpoint | Accesso |
+|---|---|---|
+| POST | `/api/teams` | Autenticato |
+| GET | `/api/teams` | Autenticato |
+| GET | `/api/teams/{id}` | Autenticato |
+| PUT | `/api/teams/{id}` | **ADMIN / ORGANIZER** |
+| DELETE | `/api/teams/{id}` | **ADMIN** |
+
+### Membri delle squadre (3)
+| Metodo | Endpoint | Accesso |
+|---|---|---|
+| POST | `/api/teams/{teamId}/members` | **ADMIN / ORGANIZER** |
+| GET | `/api/teams/{teamId}/members` | Autenticato |
+| DELETE | `/api/teams/{teamId}/members/{memberId}` | **ADMIN / ORGANIZER** |
+
+### Partite (2)
+| Metodo | Endpoint | Accesso |
+|---|---|---|
+| PUT | `/api/matches/{id}/result` | **ADMIN / ORGANIZER** |
+| GET | `/api/matches/round/{roundId}` | Autenticato |
+
+---
+
+## Avvio con Docker (consigliato)
+
+```bash
+docker-compose up --build
+```
+
+Un solo comando avvia MySQL 8 e l'applicazione. Il Dockerfile usa un multi-stage build (Maven → JRE Alpine). MySQL ha un healthcheck e l'app attende che sia pronto.
 
 ---
 
 ## Avvio in locale
 
 ### Prerequisiti
-- Java 21, Maven 3.x, MySQL 8.x
+Java 21, Maven 3.x, MySQL 8.x
 
-### Configurazione `application.properties`
 ```properties
 spring.datasource.url=jdbc:mysql://localhost:3306/leaguemate_db?createDatabaseIfNotExist=true
 spring.datasource.username=root
@@ -177,52 +220,50 @@ jwt.secret=<chiave-Base64-min-32-caratteri>
 jwt.expiration=86400000
 ```
 
-### Avvio
 ```bash
 mvn spring-boot:run
 ```
 
 ---
 
-## Avvio con Docker
-
-```bash
-docker-compose up --build
-```
-
-Avvia automaticamente MySQL 8 e l'applicazione Spring Boot con un solo comando. Il Dockerfile usa un multi-stage build (Maven per la compilazione, JRE Alpine per l'esecuzione).
-
----
-
 ## Testing
 
-**29 test unitari** con JUnit 5 e Mockito — tutti verdi ✅
-**Code coverage: 75%** (misurata con JaCoCo, requisito minimo 35%)
+**52 test** con JUnit 5, Mockito e Spring Security Test — tutti verdi ✅
+**Code coverage: 69%** (requisito minimo 35%)
 
 | Classe testata | Test | Descrizione |
 |---|---|---|
-| `UserServiceImpl` | 5 | Registrazione, duplicati email/username, findByUsername |
-| `TournamentServiceImpl` | 7 | CRUD, **algoritmo di Berger**, **calcolo classifica** |
-| `TeamServiceImpl` | 4 | Creazione, unicità nome, recupero |
-| `MatchServiceImpl` | 2 | Aggiornamento risultato, not found |
-| `AuthServiceImpl` | 3 | Registrazione con hashing, login, generazione token |
-| `JwtService` | 4 | Generazione token, estrazione username, validazione |
-| `GlobalExceptionHandler` | 4 | 404, 409, 400, 500 |
+| `TournamentServiceImpl` | 16 | CRUD, **algoritmo di Berger**, **classifica**, **statistiche**, co-organizzatori |
+| `TeamServiceImpl` | 9 | CRUD completo, unicità nome, vincoli di cancellazione |
+| `TeamMemberServiceImpl` | 6 | Aggiunta membri, duplicati, rimozione |
+| `UserServiceImpl` | 5 | Registrazione, duplicati, ricerca |
+| `JwtService` | 4 | Generazione, estrazione, validazione token |
+| `GlobalExceptionHandler` | 4 | 400, 404, 409, 500 |
+| `AuthServiceImpl` | 3 | Registrazione con hashing, login |
+| `TournamentControllerSecurityTest` | 3 | **403 con USER, 201 con ORGANIZER** (`@WebMvcTest`) |
+| `MatchServiceImpl` | 2 | Aggiornamento risultato |
 
 ### Coverage per package
 
 | Package | Coverage |
 |---|---|
 | `exception` | 100% |
-| `service.impl` | 78% |
-| `security` | 45% |
-| **Totale** | **75%** |
+| `service.impl` | 83% |
+| `security` | 69% |
+| `controller` | 14% |
+| **Totale** | **69%** |
 
-### Esecuzione test
+> `dto` ed `entity` sono esclusi (boilerplate Lombok). I controller sono **inclusi**.
+
+### Bug individuati dai test
+
+1. **Ordinamento della classifica** — `.thenComparingInt(...).reversed()` invertiva l'intero comparatore concatenato, producendo una classifica rovesciata.
+2. **Status code su accesso negato** — l'handler generico su `Exception.class` intercettava `AccessDeniedException`, trasformando un legittimo `403` in un `500`.
+
 ```bash
 mvn clean test
 ```
-Il report JaCoCo viene generato in `target/site/jacoco/index.html`.
+Report JaCoCo in `target/site/jacoco/index.html`.
 
 ---
 
@@ -232,26 +273,9 @@ Il report JaCoCo viene generato in `target/site/jacoco/index.html`.
 |---|---|
 | Codice sorgente completo | ✅ |
 | Script SQL (`schema.sql` + `data.sql`) | ✅ |
-| Collection Postman | ✅ |
+| Collection Postman (25 endpoint, 6 cartelle) | ✅ |
 | Script Docker (`Dockerfile` + `docker-compose.yml`) | ✅ |
 | Relazione tecnica | ✅ |
-
----
-
-## Stato del progetto
-
-| Layer | Stato |
-|---|---|
-| Entity | ✅ Completo |
-| Repository | ✅ Completo |
-| Service | ✅ Completo |
-| Security (JWT + RBAC) | ✅ Completo |
-| Controller | ✅ Completo |
-| Docker | ✅ Completo |
-| Test (JUnit 5 + Mockito) | ✅ 29/29 verdi — coverage 75% |
-| Script SQL | ✅ Completo |
-| Postman Collection | ✅ Completo |
-| Relazione tecnica | ✅ Completo |
 
 ---
 

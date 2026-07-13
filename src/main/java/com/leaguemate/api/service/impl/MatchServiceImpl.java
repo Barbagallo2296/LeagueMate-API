@@ -2,9 +2,9 @@ package com.leaguemate.api.service.impl;
 
 import com.leaguemate.api.entity.Match;
 import com.leaguemate.api.entity.MatchStatus;
+import com.leaguemate.api.exception.ResourceNotFoundException;
 import com.leaguemate.api.repository.MatchRepository;
 import com.leaguemate.api.service.MatchService;
-import com.leaguemate.api.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +33,6 @@ public class MatchServiceImpl implements MatchService {
     @Override
     @Transactional(readOnly = true)
     public List<Match> getMatchesByRound(Long roundId) {
-        return matchRepository.findByRoundId(roundId);
+        return matchRepository.findByRoundIdWithTeams(roundId);
     }
 }

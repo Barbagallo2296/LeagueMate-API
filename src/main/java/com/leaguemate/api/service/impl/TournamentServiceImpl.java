@@ -1,6 +1,7 @@
 package com.leaguemate.api.service.impl;
 
 import com.leaguemate.api.dto.StandingEntry;
+import com.leaguemate.api.dto.TournamentStatsResponse;
 import com.leaguemate.api.entity.*;
 import com.leaguemate.api.exception.ResourceConflictException;
 import com.leaguemate.api.exception.ResourceNotFoundException;
@@ -22,6 +23,7 @@ public class TournamentServiceImpl implements TournamentService {
     private final TeamRepository teamRepository;
     private final TournamentRegistrationRepository registrationRepository;
     private final MatchRepository matchRepository;
+    private final UserRepository userRepository;
 
     @Override
     @Transactional
@@ -49,8 +51,44 @@ public class TournamentServiceImpl implements TournamentService {
 
     @Override
     @Transactional
+    public Tournament updateTournament(Long id, String name, String season, int pointsForWin, int pointsForDraw) {
+        Tournament tournament = getTournamentById(id);
+
+        if (tournament.getStatus() == TournamentStatus.COMPLETED) {
+            throw new ResourceConflictException("Cannot modify a completed tournament");
+        }
+
+        tournament.setName(name);
+        tournament.setSeason(season);
+        tournament.setPointsForWin(pointsForWin);
+        tournament.setPointsForDraw(pointsForDraw);
+
+        return tournamentRepository.save(tournament);
+    }
+
+    @Override
+    @Transactional
+    public void deleteTournament(Long id) {
+        Tournament tournament = getTournamentById(id);
+
+        if (tournament.getStatus() == TournamentStatus.ACTIVE) {
+            throw new ResourceConflictException(
+                    "Cannot delete an active tournament. Complete it first.");
+        }
+
+        tournamentRepository.delete(tournament);
+    }
+
+    @Override
+    @Transactional
     public TournamentRegistration registerTeamToTournament(Long tournamentId, Long teamId) {
         Tournament tournament = getTournamentById(tournamentId);
+
+        if (tournament.getStatus() != TournamentStatus.DRAFT) {
+            throw new ResourceConflictException(
+                    "Cannot register teams to a tournament that is not in DRAFT status. Current status: "
+                            + tournament.getStatus());
+        }
 
         Team team = teamRepository.findById(teamId)
                 .orElseThrow(() -> new ResourceNotFoundException("Team not found with id: " + teamId));
@@ -144,11 +182,10 @@ public class TournamentServiceImpl implements TournamentService {
 
         Map<String, List<Integer>> statsMap = new HashMap<>();
 
-        registrationRepository.findByTournamentId(tournamentId).stream()
-                .filter(reg -> reg.getStatus() == RegistrationStatus.CONFIRMED)
+        registrationRepository.findConfirmedWithTeams(tournamentId, RegistrationStatus.CONFIRMED)
                 .forEach(reg -> statsMap.put(reg.getTeam().getName(), Arrays.asList(0, 0, 0, 0, 0, 0)));
 
-        matchRepository.findByRoundTournamentIdAndStatus(tournamentId, MatchStatus.COMPLETED)
+        matchRepository.findCompletedMatchesWithTeams(tournamentId, MatchStatus.COMPLETED)
                 .forEach(match -> {
                     String home = match.getHomeTeam().getName();
                     String away = match.getAwayTeam().getName();
@@ -192,5 +229,92 @@ public class TournamentServiceImpl implements TournamentService {
                 .sorted(Comparator.comparingInt(StandingEntry::points).reversed()
                         .thenComparing(Comparator.comparingInt(StandingEntry::goalDifference).reversed()))
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Statistiche aggregate del torneo. Usa query JPQL di aggregazione (COUNT)
+     * e riusa il calcolo della classifica per individuare il miglior attacco.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public TournamentStatsResponse getTournamentStats(Long tournamentId) {
+        Tournament tournament = getTournamentById(tournamentId);
+
+        long registeredTeams = registrationRepository.countConfirmedTeams(
+                tournamentId, RegistrationStatus.CONFIRMED);
+
+        long playedMatches = matchRepository.countMatchesByTournamentAndStatus(
+                tournamentId, MatchStatus.COMPLETED);
+
+        long scheduledMatches = matchRepository.countMatchesByTournamentAndStatus(
+                tournamentId, MatchStatus.SCHEDULED);
+
+        long totalMatches = playedMatches + scheduledMatches;
+
+        List<StandingEntry> standings = calculateStandings(tournamentId);
+
+        int totalGoals = standings.stream()
+                .mapToInt(StandingEntry::goalsFor)
+                .sum();
+
+        double avgGoals = playedMatches > 0
+                ? Math.round((double) totalGoals / playedMatches * 100.0) / 100.0
+                : 0.0;
+
+        StandingEntry topScorer = standings.stream()
+                .max(Comparator.comparingInt(StandingEntry::goalsFor))
+                .orElse(null);
+
+        return new TournamentStatsResponse(
+                tournament.getId(),
+                tournament.getName(),
+                registeredTeams,
+                totalMatches,
+                playedMatches,
+                scheduledMatches,
+                totalGoals,
+                avgGoals,
+                topScorer != null ? topScorer.teamName() : null,
+                topScorer != null ? topScorer.goalsFor() : 0
+        );
+    }
+
+    @Override
+    @Transactional
+    public void addOrganizer(Long tournamentId, Long userId) {
+        Tournament tournament = getTournamentById(tournamentId);
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
+
+        if (tournament.getOrganizers().contains(user)) {
+            throw new ResourceConflictException("User is already an organizer of this tournament");
+        }
+
+        tournament.getOrganizers().add(user);
+        tournamentRepository.save(tournament);
+    }
+
+    @Override
+    @Transactional
+    public void removeOrganizer(Long tournamentId, Long userId) {
+        Tournament tournament = getTournamentById(tournamentId);
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
+
+        if (!tournament.getOrganizers().contains(user)) {
+            throw new ResourceNotFoundException("User is not an organizer of this tournament");
+        }
+
+        tournament.getOrganizers().remove(user);
+        tournamentRepository.save(tournament);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<User> getOrganizers(Long tournamentId) {
+        Tournament tournament = getTournamentById(tournamentId);
+        return new ArrayList<>(tournament.getOrganizers());
     }
 }
