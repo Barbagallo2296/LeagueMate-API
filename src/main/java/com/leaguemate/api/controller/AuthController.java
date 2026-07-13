@@ -3,7 +3,7 @@ package com.leaguemate.api.controller;
 import com.leaguemate.api.dto.AuthResponse;
 import com.leaguemate.api.dto.LoginRequest;
 import com.leaguemate.api.dto.RegisterRequest;
-import com.leaguemate.api.dto.UserResponse; // <-- MANCAVA QUESTO IMPORT!
+import com.leaguemate.api.dto.UserResponse;
 import com.leaguemate.api.entity.User;
 import com.leaguemate.api.service.AuthService;
 import jakarta.validation.Valid;

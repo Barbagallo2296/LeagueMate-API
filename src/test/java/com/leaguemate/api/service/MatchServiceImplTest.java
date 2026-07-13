@@ -33,7 +33,7 @@ class MatchServiceImplTest {
     void setUp() {
         match = new Match();
         match.setId(1L);
-        match.setStatus(MatchStatus.SCHEDULED); // Corretto da PENDING a SCHEDULED
+        match.setStatus(MatchStatus.SCHEDULED);
     }
 
     @Test

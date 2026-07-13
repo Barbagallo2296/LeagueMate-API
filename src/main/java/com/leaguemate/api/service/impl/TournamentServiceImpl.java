@@ -190,7 +190,7 @@ public class TournamentServiceImpl implements TournamentService {
                     return new StandingEntry(name, s.get(0), s.get(1), s.get(2), s.get(3), s.get(4), s.get(5), goalDiff);
                 })
                 .sorted(Comparator.comparingInt(StandingEntry::points).reversed()
-                        .thenComparingInt(StandingEntry::goalDifference).reversed())
+                        .thenComparing(Comparator.comparingInt(StandingEntry::goalDifference).reversed()))
                 .collect(Collectors.toList());
     }
 }
