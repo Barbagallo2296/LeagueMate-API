@@ -16,12 +16,12 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -46,7 +46,6 @@ class TeamMemberServiceImplTest {
         team = new Team();
         team.setId(1L);
         team.setName("Straw Hat FC");
-        team.setMembers(new ArrayList<>());
 
         user = new User();
         user.setId(1L);
@@ -67,7 +66,7 @@ class TeamMemberServiceImplTest {
     void addMemberToTeam_Success() {
         when(teamRepository.findById(1L)).thenReturn(Optional.of(team));
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
-        when(teamMemberRepository.findAll()).thenReturn(List.of());
+        when(teamMemberRepository.existsByTeamIdAndUserId(1L, 1L)).thenReturn(false);
         when(teamMemberRepository.save(any(TeamMember.class))).thenReturn(member);
 
         TeamMemberResponse response = teamMemberService.addMemberToTeam(1L, 1L, TeamRole.CAPTAIN);
@@ -87,10 +86,19 @@ class TeamMemberServiceImplTest {
     }
 
     @Test
+    void addMemberToTeam_ThrowsNotFound_WhenUserDoesNotExist() {
+        when(teamRepository.findById(1L)).thenReturn(Optional.of(team));
+        when(userRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> teamMemberService.addMemberToTeam(1L, 99L, TeamRole.PLAYER));
+    }
+
+    @Test
     void addMemberToTeam_ThrowsConflict_WhenUserAlreadyMember() {
         when(teamRepository.findById(1L)).thenReturn(Optional.of(team));
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
-        when(teamMemberRepository.findAll()).thenReturn(List.of(member));
+        when(teamMemberRepository.existsByTeamIdAndUserId(1L, 1L)).thenReturn(true);
 
         assertThrows(ResourceConflictException.class,
                 () -> teamMemberService.addMemberToTeam(1L, 1L, TeamRole.PLAYER));
@@ -98,14 +106,36 @@ class TeamMemberServiceImplTest {
     }
 
     @Test
-    void getMembersByTeam_ReturnsList() {
-        team.getMembers().add(member);
+    void addMemberToTeam_ChecksDuplicateWithoutLoadingWholeTable() {
         when(teamRepository.findById(1L)).thenReturn(Optional.of(team));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(teamMemberRepository.existsByTeamIdAndUserId(1L, 1L)).thenReturn(false);
+        when(teamMemberRepository.save(any(TeamMember.class))).thenReturn(member);
+
+        teamMemberService.addMemberToTeam(1L, 1L, TeamRole.PLAYER);
+
+        verify(teamMemberRepository, never()).findAll();
+    }
+
+    @Test
+    void getMembersByTeam_ReturnsList() {
+        when(teamRepository.existsById(1L)).thenReturn(true);
+        when(teamMemberRepository.findByTeamIdWithUserAndTeam(1L)).thenReturn(List.of(member));
 
         List<TeamMemberResponse> members = teamMemberService.getMembersByTeam(1L);
 
         assertEquals(1, members.size());
         assertEquals("manuel22", members.get(0).username());
+        assertEquals("Straw Hat FC", members.get(0).teamName());
+    }
+
+    @Test
+    void getMembersByTeam_ThrowsNotFound_WhenTeamDoesNotExist() {
+        when(teamRepository.existsById(99L)).thenReturn(false);
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> teamMemberService.getMembersByTeam(99L));
+        verify(teamMemberRepository, never()).findByTeamIdWithUserAndTeam(anyLong());
     }
 
     @Test

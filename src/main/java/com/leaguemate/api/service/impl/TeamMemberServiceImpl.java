@@ -17,7 +17,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -36,10 +35,7 @@ public class TeamMemberServiceImpl implements TeamMemberService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
 
-        boolean alreadyMember = teamMemberRepository.findAll().stream()
-                .anyMatch(m -> m.getTeam().getId().equals(teamId) && m.getUser().getId().equals(userId));
-
-        if (alreadyMember) {
+        if (teamMemberRepository.existsByTeamIdAndUserId(teamId, userId)) {
             throw new ResourceConflictException("User is already a member of this team");
         }
 
@@ -55,12 +51,13 @@ public class TeamMemberServiceImpl implements TeamMemberService {
     @Override
     @Transactional(readOnly = true)
     public List<TeamMemberResponse> getMembersByTeam(Long teamId) {
-        Team team = teamRepository.findById(teamId)
-                .orElseThrow(() -> new ResourceNotFoundException("Team not found with id: " + teamId));
+        if (!teamRepository.existsById(teamId)) {
+            throw new ResourceNotFoundException("Team not found with id: " + teamId);
+        }
 
-        return team.getMembers().stream()
+        return teamMemberRepository.findByTeamIdWithUserAndTeam(teamId).stream()
                 .map(this::toResponse)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     @Override
