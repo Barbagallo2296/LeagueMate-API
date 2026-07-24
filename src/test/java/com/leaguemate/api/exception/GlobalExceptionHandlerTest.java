@@ -8,6 +8,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -73,5 +76,36 @@ class GlobalExceptionHandlerTest {
 
         assertNotNull(response);
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+    }
+
+    @Test
+    void handleAuthenticationException_Returns401() {
+        AuthenticationException ex = new BadCredentialsException("Bad credentials");
+
+        ResponseEntity<?> response = exceptionHandler.handleAuthenticationException(ex);
+
+        assertNotNull(response);
+        assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertTrue(response.getBody().toString().contains("Invalid username or password"));
+    }
+
+    @Test
+    void handleAuthenticationException_DoesNotLeakInternalMessage() {
+        AuthenticationException ex = new BadCredentialsException("Bad credentials for user manuel22");
+
+        ResponseEntity<?> response = exceptionHandler.handleAuthenticationException(ex);
+
+        assertNotNull(response.getBody());
+        assertFalse(response.getBody().toString().contains("manuel22"));
+    }
+
+    @Test
+    void handleAuthenticationException_HandlesWholeHierarchy() {
+        AuthenticationException ex = new DisabledException("Account disabilitato");
+
+        ResponseEntity<?> response = exceptionHandler.handleAuthenticationException(ex);
+
+        assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
     }
 }
