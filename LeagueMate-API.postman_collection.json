@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "b3c4d5e6-a1b2-3c4d-5e6f-7a8b9c0d1e2f",
     "name": "LeagueMate-API",
-    "description": "Collezione completa per il Project Work UF14 - Include gestione automatica del JWT Token.",
+    "description": "Collezione completa per il Project Work UF14 - LeagueMate API.\n\nIl token JWT viene salvato automaticamente nelle variabili di collection dopo la chiamata '1. Auth > POST Login' e riutilizzato da tutte le altre richieste.\n\nOrdine consigliato per una prova completa: Login -> Create Team -> Create Tournament -> Register Team to Tournament -> Generate Rounds -> Update Match Result -> Standings -> Stats.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -43,13 +43,20 @@
             {
               "listen": "test",
               "script": {
+                "type": "text/javascript",
                 "exec": [
                   "const response = pm.response.json();",
+                  "",
+                  "pm.test(\"Login riuscito\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(response.token).to.be.a('string').and.not.empty;",
+                  "});",
+                  "",
                   "if (response.token) {",
-                  "    pm.environment.set(\"jwt_token\", response.token);",
+                  "    pm.collectionVariables.set(\"jwt_token\", response.token);",
+                  "    console.log(\"JWT salvato nelle variabili di collection.\");",
                   "}"
-                ],
-                "type": "text/javascript"
+                ]
               }
             }
           ],
@@ -608,6 +615,269 @@
                 "1"
               ]
             }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "7. Users",
+      "description": "Modulo obbligatorio per la gestione degli Utenti.",
+      "item": [
+        {
+          "name": "GET Current User",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/users/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "me"
+              ]
+            },
+            "description": "Dati dell'utente autenticato, ricavati dal token JWT. Accessibile a qualsiasi utente autenticato."
+          },
+          "response": []
+        },
+        {
+          "name": "GET All Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/users",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "users"
+              ]
+            },
+            "description": "Elenco completo degli utenti. Riservato al ruolo ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "GET User by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/users/2",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "2"
+              ]
+            },
+            "description": "Dettaglio di un singolo utente. Accessibile a qualsiasi utente autenticato."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Update User Role",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/users/2/role",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "2",
+                "role"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"role\": \"ORGANIZER\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Promozione o declassamento di un utente. Riservato al ruolo ADMIN. Il declassamento dell'ultimo ADMIN rimasto viene rifiutato con 409 Conflict."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "8. Error Handling",
+      "description": "Richieste volutamente errate, per verificare che l'applicazione gestisca gli errori in modo controllato restituendo status code corretti e un formato di risposta coerente.",
+      "item": [
+        {
+          "name": "POST Login - Wrong Password (401)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"username\": \"manuel22\",\n    \"password\": \"passwordSbagliata\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Password errata. Attende 401 Unauthorized con messaggio generico."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Login - Unknown User (401)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"username\": \"utenteInesistente\",\n    \"password\": \"qualsiasi\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Username inesistente. Attende 401 con la STESSA risposta del caso precedente: distinguere i due casi permetterebbe di enumerare gli account registrati."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Tournaments - Malformed JWT (401)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer token-non-valido",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/tournaments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tournaments"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Token JWT corrotto. L'eccezione nasce nel JwtAuthFilter, prima del DispatcherServlet, quindi non e' intercettabile dal @RestControllerAdvice: viene gestita nel filtro stesso. Attende 401 JSON."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Users - Missing Token (401)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/users",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "users"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Nessun header Authorization su endpoint protetto. Attende 401."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Tournament - Not Found (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tournaments/9999",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tournaments",
+                "9999"
+              ]
+            },
+            "description": "Risorsa inesistente. Attende 404 Not Found."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Create Team - Validation Error (400)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/teams",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "teams"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"A\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Nome squadra sotto il minimo di 2 caratteri. Attende 400 con l'elenco dei campi non validi."
           },
           "response": []
         }
