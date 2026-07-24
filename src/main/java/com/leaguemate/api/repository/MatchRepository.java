@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface MatchRepository extends JpaRepository<Match, Long> {
@@ -16,6 +17,14 @@ public interface MatchRepository extends JpaRepository<Match, Long> {
 
     List<Match> findByRoundTournamentIdAndStatus(Long tournamentId, MatchStatus status);
 
+    @Query("""
+            SELECT m FROM Match m
+            JOIN FETCH m.homeTeam
+            JOIN FETCH m.awayTeam
+            JOIN FETCH m.round
+            WHERE m.id = :id
+            """)
+    Optional<Match> findByIdWithTeams(@Param("id") Long id);
 
     @Query("""
             SELECT DISTINCT m FROM Match m
@@ -30,7 +39,6 @@ public interface MatchRepository extends JpaRepository<Match, Long> {
             @Param("status") MatchStatus status
     );
 
-
     @Query("""
             SELECT DISTINCT m FROM Match m
             JOIN FETCH m.homeTeam
@@ -40,7 +48,6 @@ public interface MatchRepository extends JpaRepository<Match, Long> {
             ORDER BY m.id
             """)
     List<Match> findByRoundIdWithTeams(@Param("roundId") Long roundId);
-
 
     @Query("""
             SELECT COUNT(m) FROM Match m

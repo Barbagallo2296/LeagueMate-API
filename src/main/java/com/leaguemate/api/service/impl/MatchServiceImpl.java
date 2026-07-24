@@ -20,7 +20,7 @@ public class MatchServiceImpl implements MatchService {
     @Override
     @Transactional
     public Match updateMatchResult(Long id, Integer homeScore, Integer awayScore) {
-        Match match = matchRepository.findById(id)
+        Match match = matchRepository.findByIdWithTeams(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Match not found with id: " + id));
 
         match.setHomeScore(homeScore);
