@@ -1,11 +1,12 @@
 package com.leaguemate.api;
 
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
+
 
 @SpringBootTest
-@Disabled("Richiede un database MySQL attivo — eseguire manualmente in ambiente locale o Docker")
+@ActiveProfiles("test")
 class ApiApplicationTests {
 
 	@Test
