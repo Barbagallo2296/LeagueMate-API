@@ -712,6 +712,57 @@
             "description": "Promozione o declassamento di un utente. Riservato al ruolo ADMIN. Il declassamento dell'ultimo ADMIN rimasto viene rifiutato con 409 Conflict."
           },
           "response": []
+        },
+        {
+          "name": "GET User Profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/users/1/profile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "1",
+                "profile"
+              ]
+            },
+            "description": "Profilo utente, collegato a User da una relazione @OneToOne. Accessibile a qualsiasi utente autenticato."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Update User Profile",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/users/1/profile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "1",
+                "profile"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"bio\": \"Full Stack Developer & LeagueMate Creator\",\n    \"avatarUrl\": \"https://avatar.com/manuel.png\",\n    \"phoneNumber\": \"+39 333 1234567\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Aggiornamento del profilo. Autorizzazione a livello di risorsa: un utente puo' modificare solo il proprio profilo, un ADMIN qualsiasi profilo. Modificare il profilo altrui restituisce 403."
+          },
+          "response": []
         }
       ]
     },
@@ -878,6 +929,66 @@
               }
             },
             "description": "Nome squadra sotto il minimo di 2 caratteri. Attende 400 con l'elenco dei campi non validi."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Profile of Another User (403)",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/users/2/profile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "2",
+                "profile"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"bio\": \"Tentativo di modifica non autorizzata\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Tentativo di modificare il profilo di un altro utente non essendo ADMIN. Attende 403 Forbidden: il controllo non e' sul ruolo ma sulla proprieta' della risorsa, quindi vive nel service."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Profile - Invalid Phone (400)",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/users/1/profile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "1",
+                "profile"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"bio\": \"Test validazione\",\n    \"phoneNumber\": \"non-e-un-numero\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Numero di telefono non conforme al pattern. Attende 400 Bad Request con l'elenco dei campi non validi."
           },
           "response": []
         }

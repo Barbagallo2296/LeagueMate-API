@@ -1,6 +1,8 @@
 package com.leaguemate.api.controller;
 
+import com.leaguemate.api.dto.UpdateUserProfileRequest;
 import com.leaguemate.api.dto.UpdateUserRoleRequest;
+import com.leaguemate.api.dto.UserProfileResponse;
 import com.leaguemate.api.dto.UserResponse;
 import com.leaguemate.api.entity.User;
 import com.leaguemate.api.service.UserService;
@@ -20,7 +22,6 @@ import java.util.stream.Collectors;
 public class UserController {
 
     private final UserService userService;
-
     @GetMapping("/me")
     public ResponseEntity<UserResponse> getCurrentUser(@AuthenticationPrincipal User currentUser) {
         return ResponseEntity.ok(toResponse(currentUser));
@@ -48,6 +49,21 @@ public class UserController {
     ) {
         User updated = userService.updateRole(id, request.role());
         return ResponseEntity.ok(toResponse(updated));
+    }
+
+    @GetMapping("/{id}/profile")
+    public ResponseEntity<UserProfileResponse> getUserProfile(@PathVariable Long id) {
+        return ResponseEntity.ok(userService.getProfile(id));
+    }
+
+    @PutMapping("/{id}/profile")
+    public ResponseEntity<UserProfileResponse> updateUserProfile(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateUserProfileRequest request,
+            @AuthenticationPrincipal User currentUser
+    ) {
+        UserProfileResponse updated = userService.updateProfile(id, request, currentUser.getUsername());
+        return ResponseEntity.ok(updated);
     }
 
     private UserResponse toResponse(User u) {
