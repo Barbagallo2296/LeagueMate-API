@@ -18,6 +18,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -45,6 +46,8 @@ class TournamentServiceImplTest {
 
     private Tournament tournament;
     private User user;
+    private Team teamA;
+    private Team teamB;
 
     @BeforeEach
     void setUp() {
@@ -52,7 +55,10 @@ class TournamentServiceImplTest {
         tournament.setId(1L);
         tournament.setName("Champions League");
         tournament.setSeason("2026/2027");
+        tournament.setStatus(TournamentStatus.DRAFT);
         tournament.setOrganizers(new HashSet<>());
+        tournament.setRounds(new ArrayList<>());
+        tournament.setRegistrations(new ArrayList<>());
 
         user = new User();
         user.setId(1L);
@@ -61,7 +67,35 @@ class TournamentServiceImplTest {
         user.setFirstName("Marco");
         user.setLastName("Rossi");
         user.setRole(Role.ORGANIZER);
+
+        teamA = new Team();
+        teamA.setId(1L);
+        teamA.setName("Team A");
+
+        teamB = new Team();
+        teamB.setId(2L);
+        teamB.setName("Team B");
     }
+
+    private TournamentRegistration createReg(Team team) {
+        TournamentRegistration reg = new TournamentRegistration();
+        reg.setTeam(team);
+        reg.setTournament(tournament);
+        reg.setStatus(RegistrationStatus.CONFIRMED);
+        return reg;
+    }
+
+    private Match completedMatch(Team home, Team away, int homeScore, int awayScore) {
+        Match match = new Match();
+        match.setHomeTeam(home);
+        match.setAwayTeam(away);
+        match.setHomeScore(homeScore);
+        match.setAwayScore(awayScore);
+        match.setStatus(MatchStatus.COMPLETED);
+        return match;
+    }
+
+    // --- CRUD ---
 
     @Test
     void createTournament_Success() {
@@ -101,34 +135,27 @@ class TournamentServiceImplTest {
 
         List<Tournament> result = tournamentService.getAllTournaments();
 
-        assertNotNull(result);
         assertEquals(2, result.size());
         verify(tournamentRepository, times(1)).findAll();
     }
 
     @Test
     void getTournamentsByStatus_ReturnsFilteredList() {
-        TournamentStatus targetStatus = TournamentStatus.ACTIVE;
-        tournament.setStatus(targetStatus);
+        tournament.setStatus(TournamentStatus.ACTIVE);
+        when(tournamentRepository.findByStatus(TournamentStatus.ACTIVE)).thenReturn(List.of(tournament));
 
-        when(tournamentRepository.findByStatus(targetStatus)).thenReturn(List.of(tournament));
+        List<Tournament> result = tournamentService.getTournamentsByStatus(TournamentStatus.ACTIVE);
 
-        List<Tournament> result = tournamentService.getTournamentsByStatus(targetStatus);
-
-        assertNotNull(result);
         assertFalse(result.isEmpty());
-        assertEquals(targetStatus, result.get(0).getStatus());
-        verify(tournamentRepository, times(1)).findByStatus(targetStatus);
+        assertEquals(TournamentStatus.ACTIVE, result.get(0).getStatus());
     }
 
     @Test
     void updateTournament_Success() {
-        tournament.setStatus(TournamentStatus.DRAFT);
         when(tournamentRepository.findById(1L)).thenReturn(Optional.of(tournament));
         when(tournamentRepository.save(any(Tournament.class))).thenReturn(tournament);
 
-        Tournament updated = tournamentService.updateTournament(
-                1L, "Nuovo Nome", "2027/2028", 3, 1);
+        Tournament updated = tournamentService.updateTournament(1L, "Nuovo Nome", "2027/2028", 3, 1);
 
         assertEquals("Nuovo Nome", updated.getName());
         assertEquals("2027/2028", updated.getSeason());
@@ -147,7 +174,6 @@ class TournamentServiceImplTest {
 
     @Test
     void deleteTournament_Success() {
-        tournament.setStatus(TournamentStatus.DRAFT);
         when(tournamentRepository.findById(1L)).thenReturn(Optional.of(tournament));
 
         tournamentService.deleteTournament(1L);
@@ -164,81 +190,206 @@ class TournamentServiceImplTest {
         verify(tournamentRepository, never()).delete(any(Tournament.class));
     }
 
+    // --- Iscrizioni ---
+
+    @Test
+    void registerTeamToTournament_Success() {
+        when(tournamentRepository.findWithRegistrationsById(1L)).thenReturn(Optional.of(tournament));
+        when(teamRepository.findById(1L)).thenReturn(Optional.of(teamA));
+        when(registrationRepository.save(any(TournamentRegistration.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        TournamentRegistration reg = tournamentService.registerTeamToTournament(1L, 1L);
+
+        assertEquals(RegistrationStatus.CONFIRMED, reg.getStatus());
+        assertEquals(teamA, reg.getTeam());
+    }
+
+    @Test
+    void registerTeamToTournament_ThrowsConflict_WhenAlreadyRegistered() {
+        tournament.getRegistrations().add(createReg(teamA));
+        when(tournamentRepository.findWithRegistrationsById(1L)).thenReturn(Optional.of(tournament));
+        when(teamRepository.findById(1L)).thenReturn(Optional.of(teamA));
+
+        assertThrows(ResourceConflictException.class,
+                () -> tournamentService.registerTeamToTournament(1L, 1L));
+        verify(registrationRepository, never()).save(any(TournamentRegistration.class));
+    }
+
+    @Test
+    void registerTeamToTournament_ThrowsConflict_WhenTournamentIsActive() {
+        tournament.setStatus(TournamentStatus.ACTIVE);
+        when(tournamentRepository.findWithRegistrationsById(1L)).thenReturn(Optional.of(tournament));
+
+        assertThrows(ResourceConflictException.class,
+                () -> tournamentService.registerTeamToTournament(1L, 1L));
+    }
+
+    // --- Algoritmo di Berger ---
+
     @Test
     void generateRounds_WithFourTeams_CreatesThreeRounds() {
-        Team teamA = new Team(); teamA.setId(1L); teamA.setName("Team A");
-        Team teamB = new Team(); teamB.setId(2L); teamB.setName("Team B");
-        Team teamC = new Team(); teamC.setId(3L); teamC.setName("Team C");
-        Team teamD = new Team(); teamD.setId(4L); teamD.setName("Team D");
+        Team teamC = new Team();
+        teamC.setId(3L);
+        teamC.setName("Team C");
+        Team teamD = new Team();
+        teamD.setId(4L);
+        teamD.setName("Team D");
 
         when(tournamentRepository.findById(1L)).thenReturn(Optional.of(tournament));
-        when(registrationRepository.findByTournamentId(1L)).thenReturn(List.of(
-                createReg(teamA), createReg(teamB), createReg(teamC), createReg(teamD)
-        ));
+        when(registrationRepository.findConfirmedWithTeams(1L, RegistrationStatus.CONFIRMED))
+                .thenReturn(List.of(createReg(teamA), createReg(teamB), createReg(teamC), createReg(teamD)));
         when(tournamentRepository.save(any(Tournament.class))).thenReturn(tournament);
 
         List<Round> rounds = tournamentService.generateRounds(1L);
 
-        assertNotNull(rounds);
         assertEquals(3, rounds.size());
         assertEquals(2, rounds.get(0).getMatches().size());
         assertEquals(TournamentStatus.ACTIVE, tournament.getStatus());
     }
 
     @Test
-    void calculateStandings_WithCompletedMatch_ReturnsSortedStandings() {
-        Team teamA = new Team(); teamA.setId(1L); teamA.setName("Team A");
-        Team teamB = new Team(); teamB.setId(2L); teamB.setName("Team B");
+    void generateRounds_WithThreeTeams_CreatesByeRound() {
+        Team teamC = new Team();
+        teamC.setId(3L);
+        teamC.setName("Team C");
 
         when(tournamentRepository.findById(1L)).thenReturn(Optional.of(tournament));
         when(registrationRepository.findConfirmedWithTeams(1L, RegistrationStatus.CONFIRMED))
+                .thenReturn(List.of(createReg(teamA), createReg(teamB), createReg(teamC)));
+        when(tournamentRepository.save(any(Tournament.class))).thenReturn(tournament);
+
+        List<Round> rounds = tournamentService.generateRounds(1L);
+
+        assertEquals(3, rounds.size());
+        int totalMatches = rounds.stream().mapToInt(r -> r.getMatches().size()).sum();
+        assertEquals(3, totalMatches);
+    }
+
+    @Test
+    void generateRounds_ThrowsConflict_WithLessThanTwoTeams() {
+        when(tournamentRepository.findById(1L)).thenReturn(Optional.of(tournament));
+        when(registrationRepository.findConfirmedWithTeams(1L, RegistrationStatus.CONFIRMED))
+                .thenReturn(List.of(createReg(teamA)));
+
+        assertThrows(ResourceConflictException.class, () -> tournamentService.generateRounds(1L));
+    }
+
+    @Test
+    void generateRounds_ThrowsConflict_WhenTournamentIsAlreadyActive() {
+        tournament.setStatus(TournamentStatus.ACTIVE);
+        when(tournamentRepository.findById(1L)).thenReturn(Optional.of(tournament));
+
+        assertThrows(ResourceConflictException.class, () -> tournamentService.generateRounds(1L));
+        verify(tournamentRepository, never()).save(any(Tournament.class));
+    }
+
+    // --- Classifica ---
+
+    @Test
+    void calculateStandings_WithCompletedMatch_ReturnsSortedStandings() {
+        when(tournamentRepository.findById(1L)).thenReturn(Optional.of(tournament));
+        when(registrationRepository.findConfirmedWithTeams(1L, RegistrationStatus.CONFIRMED))
                 .thenReturn(List.of(createReg(teamA), createReg(teamB)));
-
-        Match match = new Match();
-        match.setHomeTeam(teamA);
-        match.setAwayTeam(teamB);
-        match.setHomeScore(3);
-        match.setAwayScore(1);
-        match.setStatus(MatchStatus.COMPLETED);
-
         when(matchRepository.findCompletedMatchesWithTeams(1L, MatchStatus.COMPLETED))
-                .thenReturn(List.of(match));
+                .thenReturn(List.of(completedMatch(teamA, teamB, 3, 1)));
 
         List<StandingEntry> standings = tournamentService.calculateStandings(1L);
 
         assertEquals(2, standings.size());
         assertEquals("Team A", standings.get(0).teamName());
         assertEquals(3, standings.get(0).points());
+        assertEquals(1, standings.get(0).wins());
         assertEquals(2, standings.get(0).goalDifference());
         assertEquals("Team B", standings.get(1).teamName());
         assertEquals(0, standings.get(1).points());
+        assertEquals(1, standings.get(1).losses());
         assertEquals(-2, standings.get(1).goalDifference());
     }
 
     @Test
-    void getTournamentStats_ReturnsCorrectStats() {
-        Team teamA = new Team(); teamA.setId(1L); teamA.setName("Team A");
-        Team teamB = new Team(); teamB.setId(2L); teamB.setName("Team B");
-
+    void calculateStandings_DrawAssignsOnePointEach() {
         when(tournamentRepository.findById(1L)).thenReturn(Optional.of(tournament));
-        when(registrationRepository.countConfirmedTeams(1L, RegistrationStatus.CONFIRMED))
-                .thenReturn(2L);
-        when(matchRepository.countMatchesByTournamentAndStatus(1L, MatchStatus.COMPLETED))
-                .thenReturn(1L);
-        when(matchRepository.countMatchesByTournamentAndStatus(1L, MatchStatus.SCHEDULED))
-                .thenReturn(0L);
         when(registrationRepository.findConfirmedWithTeams(1L, RegistrationStatus.CONFIRMED))
                 .thenReturn(List.of(createReg(teamA), createReg(teamB)));
-
-        Match match = new Match();
-        match.setHomeTeam(teamA);
-        match.setAwayTeam(teamB);
-        match.setHomeScore(3);
-        match.setAwayScore(1);
-        match.setStatus(MatchStatus.COMPLETED);
-
         when(matchRepository.findCompletedMatchesWithTeams(1L, MatchStatus.COMPLETED))
-                .thenReturn(List.of(match));
+                .thenReturn(List.of(completedMatch(teamA, teamB, 2, 2)));
+
+        List<StandingEntry> standings = tournamentService.calculateStandings(1L);
+
+        assertEquals(1, standings.get(0).points());
+        assertEquals(1, standings.get(1).points());
+        assertEquals(1, standings.get(0).draws());
+        assertEquals(0, standings.get(0).goalDifference());
+    }
+
+    @Test
+    void calculateStandings_UsesCustomPointsConfiguration() {
+        tournament.setPointsForWin(5);
+        tournament.setPointsForDraw(2);
+
+        when(tournamentRepository.findById(1L)).thenReturn(Optional.of(tournament));
+        when(registrationRepository.findConfirmedWithTeams(1L, RegistrationStatus.CONFIRMED))
+                .thenReturn(List.of(createReg(teamA), createReg(teamB)));
+        when(matchRepository.findCompletedMatchesWithTeams(1L, MatchStatus.COMPLETED))
+                .thenReturn(List.of(completedMatch(teamA, teamB, 1, 0)));
+
+        List<StandingEntry> standings = tournamentService.calculateStandings(1L);
+
+        assertEquals(5, standings.get(0).points());
+    }
+
+    @Test
+    void calculateStandings_TieBreaksByGoalDifferenceThenGoalsFor() {
+        Team teamC = new Team();
+        teamC.setId(3L);
+        teamC.setName("Team C");
+        Team teamD = new Team();
+        teamD.setId(4L);
+        teamD.setName("Team D");
+
+        when(tournamentRepository.findById(1L)).thenReturn(Optional.of(tournament));
+        when(registrationRepository.findConfirmedWithTeams(1L, RegistrationStatus.CONFIRMED))
+                .thenReturn(List.of(createReg(teamA), createReg(teamB), createReg(teamC), createReg(teamD)));
+        when(matchRepository.findCompletedMatchesWithTeams(1L, MatchStatus.COMPLETED))
+                .thenReturn(List.of(
+                        completedMatch(teamA, teamB, 5, 0),
+                        completedMatch(teamC, teamD, 1, 0)));
+
+        List<StandingEntry> standings = tournamentService.calculateStandings(1L);
+
+        assertEquals("Team A", standings.get(0).teamName());
+        assertEquals("Team C", standings.get(1).teamName());
+        assertEquals(3, standings.get(0).points());
+        assertEquals(3, standings.get(1).points());
+    }
+
+    @Test
+    void calculateStandings_TeamsWithoutMatchesStartAtZero() {
+        when(tournamentRepository.findById(1L)).thenReturn(Optional.of(tournament));
+        when(registrationRepository.findConfirmedWithTeams(1L, RegistrationStatus.CONFIRMED))
+                .thenReturn(List.of(createReg(teamA), createReg(teamB)));
+        when(matchRepository.findCompletedMatchesWithTeams(1L, MatchStatus.COMPLETED))
+                .thenReturn(List.of());
+
+        List<StandingEntry> standings = tournamentService.calculateStandings(1L);
+
+        assertEquals(2, standings.size());
+        assertTrue(standings.stream().allMatch(s -> s.points() == 0));
+    }
+
+    // --- Statistiche ---
+
+    @Test
+    void getTournamentStats_ReturnsCorrectStats() {
+        when(tournamentRepository.findById(1L)).thenReturn(Optional.of(tournament));
+        when(registrationRepository.countConfirmedTeams(1L, RegistrationStatus.CONFIRMED)).thenReturn(2L);
+        when(matchRepository.countMatchesByTournamentAndStatus(1L, MatchStatus.COMPLETED)).thenReturn(1L);
+        when(matchRepository.countMatchesByTournamentAndStatus(1L, MatchStatus.SCHEDULED)).thenReturn(0L);
+        when(registrationRepository.findConfirmedWithTeams(1L, RegistrationStatus.CONFIRMED))
+                .thenReturn(List.of(createReg(teamA), createReg(teamB)));
+        when(matchRepository.findCompletedMatchesWithTeams(1L, MatchStatus.COMPLETED))
+                .thenReturn(List.of(completedMatch(teamA, teamB, 3, 1)));
 
         TournamentStatsResponse stats = tournamentService.getTournamentStats(1L);
 
@@ -250,6 +401,27 @@ class TournamentServiceImplTest {
         assertEquals("Team A", stats.topScoringTeam());
         assertEquals(3, stats.topScoringTeamGoals());
     }
+
+    @Test
+    void getTournamentStats_HandlesTournamentWithoutPlayedMatches() {
+        when(tournamentRepository.findById(1L)).thenReturn(Optional.of(tournament));
+        when(registrationRepository.countConfirmedTeams(1L, RegistrationStatus.CONFIRMED)).thenReturn(2L);
+        when(matchRepository.countMatchesByTournamentAndStatus(1L, MatchStatus.COMPLETED)).thenReturn(0L);
+        when(matchRepository.countMatchesByTournamentAndStatus(1L, MatchStatus.SCHEDULED)).thenReturn(6L);
+        when(registrationRepository.findConfirmedWithTeams(1L, RegistrationStatus.CONFIRMED))
+                .thenReturn(List.of(createReg(teamA), createReg(teamB)));
+        when(matchRepository.findCompletedMatchesWithTeams(1L, MatchStatus.COMPLETED))
+                .thenReturn(List.of());
+
+        TournamentStatsResponse stats = tournamentService.getTournamentStats(1L);
+
+        assertEquals(0L, stats.playedMatches());
+        assertEquals(6L, stats.remainingMatches());
+        assertEquals(0, stats.totalGoals());
+        assertEquals(0.0, stats.averageGoalsPerMatch());
+    }
+
+    // --- Co-organizzatori ---
 
     @Test
     void addOrganizer_Success() {
@@ -287,6 +459,14 @@ class TournamentServiceImplTest {
     }
 
     @Test
+    void removeOrganizer_ThrowsNotFound_WhenNotAnOrganizer() {
+        when(tournamentRepository.findById(1L)).thenReturn(Optional.of(tournament));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        assertThrows(ResourceNotFoundException.class, () -> tournamentService.removeOrganizer(1L, 1L));
+    }
+
+    @Test
     void getOrganizers_ReturnsList() {
         tournament.getOrganizers().add(user);
         when(tournamentRepository.findById(1L)).thenReturn(Optional.of(tournament));
@@ -295,12 +475,5 @@ class TournamentServiceImplTest {
 
         assertEquals(1, organizers.size());
         assertEquals("organizer1", organizers.get(0).getUsername());
-    }
-
-    private TournamentRegistration createReg(Team team) {
-        TournamentRegistration reg = new TournamentRegistration();
-        reg.setTeam(team);
-        reg.setStatus(RegistrationStatus.CONFIRMED);
-        return reg;
     }
 }

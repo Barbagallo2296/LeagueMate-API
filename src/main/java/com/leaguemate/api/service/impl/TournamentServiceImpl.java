@@ -24,6 +24,48 @@ public class TournamentServiceImpl implements TournamentService {
     private final TournamentRegistrationRepository registrationRepository;
     private final MatchRepository matchRepository;
     private final UserRepository userRepository;
+    private static final class TeamStats {
+
+        private final String teamName;
+        private int points;
+        private int wins;
+        private int draws;
+        private int losses;
+        private int goalsFor;
+        private int goalsAgainst;
+
+        private TeamStats(String teamName) {
+            this.teamName = teamName;
+        }
+
+        private void registerWin(int scored, int conceded, int pointsForWin) {
+            points += pointsForWin;
+            wins++;
+            addGoals(scored, conceded);
+        }
+
+        private void registerDraw(int scored, int conceded, int pointsForDraw) {
+            points += pointsForDraw;
+            draws++;
+            addGoals(scored, conceded);
+        }
+
+        private void registerLoss(int scored, int conceded) {
+            losses++;
+            addGoals(scored, conceded);
+        }
+
+        private void addGoals(int scored, int conceded) {
+            goalsFor += scored;
+            goalsAgainst += conceded;
+        }
+
+        private StandingEntry toEntry() {
+            return new StandingEntry(
+                    teamName, points, wins, draws, losses,
+                    goalsFor, goalsAgainst, goalsFor - goalsAgainst);
+        }
+    }
 
     @Override
     @Transactional
@@ -34,17 +76,20 @@ public class TournamentServiceImpl implements TournamentService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Tournament getTournamentById(Long id) {
         return tournamentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Tournament not found with id: " + id));
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<Tournament> getAllTournaments() {
         return tournamentRepository.findAll();
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<Tournament> getTournamentsByStatus(TournamentStatus status) {
         return tournamentRepository.findByStatus(status);
     }
@@ -82,7 +127,9 @@ public class TournamentServiceImpl implements TournamentService {
     @Override
     @Transactional
     public TournamentRegistration registerTeamToTournament(Long tournamentId, Long teamId) {
-        Tournament tournament = getTournamentById(tournamentId);
+        Tournament tournament = tournamentRepository.findWithRegistrationsById(tournamentId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Tournament not found with id: " + tournamentId));
 
         if (tournament.getStatus() != TournamentStatus.DRAFT) {
             throw new ResourceConflictException(
@@ -93,7 +140,7 @@ public class TournamentServiceImpl implements TournamentService {
         Team team = teamRepository.findById(teamId)
                 .orElseThrow(() -> new ResourceNotFoundException("Team not found with id: " + teamId));
 
-        boolean alreadyRegistered = registrationRepository.findByTournamentId(tournamentId).stream()
+        boolean alreadyRegistered = tournament.getRegistrations().stream()
                 .anyMatch(reg -> reg.getTeam().getId().equals(teamId));
 
         if (alreadyRegistered) {
@@ -114,10 +161,16 @@ public class TournamentServiceImpl implements TournamentService {
     public List<Round> generateRounds(Long tournamentId) {
         Tournament tournament = getTournamentById(tournamentId);
 
-        List<Team> teams = registrationRepository.findByTournamentId(tournamentId).stream()
-                .filter(reg -> reg.getStatus() == RegistrationStatus.CONFIRMED)
+        if (tournament.getStatus() != TournamentStatus.DRAFT) {
+            throw new ResourceConflictException(
+                    "Rounds can only be generated for a tournament in DRAFT status. Current status: "
+                            + tournament.getStatus());
+        }
+
+        List<Team> teams = registrationRepository
+                .findConfirmedWithTeams(tournamentId, RegistrationStatus.CONFIRMED).stream()
                 .map(TournamentRegistration::getTeam)
-                .collect(Collectors.toList());
+                .collect(Collectors.toCollection(ArrayList::new));
 
         if (teams.size() < 2) {
             throw new ResourceConflictException("Cannot generate rounds with less than 2 teams");
@@ -150,19 +203,21 @@ public class TournamentServiceImpl implements TournamentService {
                 Team homeTeam = teams.get(homeIdx);
                 Team awayTeam = teams.get(awayIdx);
 
-                if (homeTeam != null && awayTeam != null) {
-                    Match match = new Match();
-                    if (roundIdx % 2 == 0) {
-                        match.setHomeTeam(homeTeam);
-                        match.setAwayTeam(awayTeam);
-                    } else {
-                        match.setHomeTeam(awayTeam);
-                        match.setAwayTeam(homeTeam);
-                    }
-                    match.setStatus(MatchStatus.SCHEDULED);
-                    match.setRound(round);
-                    round.getMatches().add(match);
+                if (homeTeam == null || awayTeam == null) {
+                    continue;
                 }
+
+                Match match = new Match();
+                if (roundIdx % 2 == 0) {
+                    match.setHomeTeam(homeTeam);
+                    match.setAwayTeam(awayTeam);
+                } else {
+                    match.setHomeTeam(awayTeam);
+                    match.setAwayTeam(homeTeam);
+                }
+                match.setStatus(MatchStatus.SCHEDULED);
+                match.setRound(round);
+                round.getMatches().add(match);
             }
             generatedRounds.add(round);
         }
@@ -180,61 +235,46 @@ public class TournamentServiceImpl implements TournamentService {
     public List<StandingEntry> calculateStandings(Long tournamentId) {
         Tournament tournament = getTournamentById(tournamentId);
 
-        Map<String, List<Integer>> statsMap = new HashMap<>();
+        Map<Long, TeamStats> table = new LinkedHashMap<>();
 
         registrationRepository.findConfirmedWithTeams(tournamentId, RegistrationStatus.CONFIRMED)
-                .forEach(reg -> statsMap.put(reg.getTeam().getName(), Arrays.asList(0, 0, 0, 0, 0, 0)));
+                .forEach(reg -> table.put(
+                        reg.getTeam().getId(),
+                        new TeamStats(reg.getTeam().getName())));
 
         matchRepository.findCompletedMatchesWithTeams(tournamentId, MatchStatus.COMPLETED)
                 .forEach(match -> {
-                    String home = match.getHomeTeam().getName();
-                    String away = match.getAwayTeam().getName();
-                    int hScore = match.getHomeScore();
-                    int aScore = match.getAwayScore();
+                    TeamStats home = table.get(match.getHomeTeam().getId());
+                    TeamStats away = table.get(match.getAwayTeam().getId());
 
-                    List<Integer> homeStats = new ArrayList<>(statsMap.get(home));
-                    List<Integer> awayStats = new ArrayList<>(statsMap.get(away));
-
-                    homeStats.set(4, homeStats.get(4) + hScore);
-                    homeStats.set(5, homeStats.get(5) + aScore);
-                    awayStats.set(4, awayStats.get(4) + aScore);
-                    awayStats.set(5, awayStats.get(5) + hScore);
-
-                    if (hScore > aScore) {
-                        homeStats.set(0, homeStats.get(0) + tournament.getPointsForWin());
-                        homeStats.set(1, homeStats.get(1) + 1);
-                        awayStats.set(3, awayStats.get(3) + 1);
-                    } else if (hScore < aScore) {
-                        awayStats.set(0, awayStats.get(0) + tournament.getPointsForWin());
-                        awayStats.set(1, awayStats.get(1) + 1);
-                        homeStats.set(3, homeStats.get(3) + 1);
-                    } else {
-                        homeStats.set(0, homeStats.get(0) + tournament.getPointsForDraw());
-                        awayStats.set(0, awayStats.get(0) + tournament.getPointsForDraw());
-                        homeStats.set(2, homeStats.get(2) + 1);
-                        awayStats.set(2, awayStats.get(2) + 1);
+                    if (home == null || away == null) {
+                        return;
                     }
 
-                    statsMap.put(home, homeStats);
-                    statsMap.put(away, awayStats);
+                    int homeScore = match.getHomeScore();
+                    int awayScore = match.getAwayScore();
+
+                    if (homeScore > awayScore) {
+                        home.registerWin(homeScore, awayScore, tournament.getPointsForWin());
+                        away.registerLoss(awayScore, homeScore);
+                    } else if (homeScore < awayScore) {
+                        away.registerWin(awayScore, homeScore, tournament.getPointsForWin());
+                        home.registerLoss(homeScore, awayScore);
+                    } else {
+                        home.registerDraw(homeScore, awayScore, tournament.getPointsForDraw());
+                        away.registerDraw(awayScore, homeScore, tournament.getPointsForDraw());
+                    }
                 });
 
-        return statsMap.entrySet().stream()
-                .map(entry -> {
-                    String name = entry.getKey();
-                    List<Integer> s = entry.getValue();
-                    int goalDiff = s.get(4) - s.get(5);
-                    return new StandingEntry(name, s.get(0), s.get(1), s.get(2), s.get(3), s.get(4), s.get(5), goalDiff);
-                })
+        return table.values().stream()
+                .map(TeamStats::toEntry)
                 .sorted(Comparator.comparingInt(StandingEntry::points).reversed()
-                        .thenComparing(Comparator.comparingInt(StandingEntry::goalDifference).reversed()))
-                .collect(Collectors.toList());
+                        .thenComparing(Comparator.comparingInt(StandingEntry::goalDifference).reversed())
+                        .thenComparing(Comparator.comparingInt(StandingEntry::goalsFor).reversed())
+                        .thenComparing(StandingEntry::teamName))
+                .toList();
     }
 
-    /**
-     * Statistiche aggregate del torneo. Usa query JPQL di aggregazione (COUNT)
-     * e riusa il calcolo della classifica per individuare il miglior attacco.
-     */
     @Override
     @Transactional(readOnly = true)
     public TournamentStatsResponse getTournamentStats(Long tournamentId) {
@@ -248,8 +288,6 @@ public class TournamentServiceImpl implements TournamentService {
 
         long scheduledMatches = matchRepository.countMatchesByTournamentAndStatus(
                 tournamentId, MatchStatus.SCHEDULED);
-
-        long totalMatches = playedMatches + scheduledMatches;
 
         List<StandingEntry> standings = calculateStandings(tournamentId);
 
@@ -269,7 +307,7 @@ public class TournamentServiceImpl implements TournamentService {
                 tournament.getId(),
                 tournament.getName(),
                 registeredTeams,
-                totalMatches,
+                playedMatches + scheduledMatches,
                 playedMatches,
                 scheduledMatches,
                 totalGoals,
