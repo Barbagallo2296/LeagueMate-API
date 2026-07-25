@@ -99,8 +99,8 @@ src/main/java/com/leaguemate/api/
 
 ## Funzionalità principali
 
-### Generazione calendario (Algoritmo di Berger)
-`generateRounds()` implementa l'algoritmo Round Robin di Berger. Con N squadre genera N-1 giornate da N/2 partite: ogni coppia si incontra esattamente una volta. Gestisce il numero dispari con un turno di riposo e alterna casa/trasferta fra le giornate. La generazione è consentita **solo in stato `DRAFT`**, per non cancellare risultati già registrati.
+### Generazione calendario (round-robin, metodo del cerchio)
+`generateRounds()` genera il calendario all'italiana con il **metodo del cerchio** (circle method), che produce lo stesso calendario delle tabelle di Berger: una squadra resta fissa e le altre ruotano attorno a essa. Con N squadre genera N-1 giornate da N/2 partite, e ogni coppia si incontra esattamente una volta. Gestisce il numero dispari con un turno di riposo e alterna casa/trasferta fra le giornate. La generazione è consentita **solo in stato `DRAFT`**, per non cancellare risultati già registrati.
 
 ### Calcolo classifica dinamico (Stream API + JOIN FETCH)
 `calculateStandings()` calcola la classifica in tempo reale dalle partite `COMPLETED`, senza persisterla: non può mai andare fuori sincrono con i risultati. Usa un accumulatore tipizzato `TeamStats` (niente indici magici) e ordina per punti, differenza reti, gol fatti e nome.

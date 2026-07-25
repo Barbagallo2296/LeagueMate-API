@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -225,7 +226,7 @@ class TournamentServiceImplTest {
                 () -> tournamentService.registerTeamToTournament(1L, 1L));
     }
 
-    // --- Algoritmo di Berger ---
+    // --- Generazione calendario (round-robin, metodo del cerchio) ---
 
     @Test
     void generateRounds_WithFourTeams_CreatesThreeRounds() {
@@ -264,6 +265,46 @@ class TournamentServiceImplTest {
         assertEquals(3, rounds.size());
         int totalMatches = rounds.stream().mapToInt(r -> r.getMatches().size()).sum();
         assertEquals(3, totalMatches);
+    }
+
+    @Test
+    void generateRounds_WithSixTeams_CreatesFiveRoundsAndFifteenMatches() {
+        Team teamC = new Team();
+        teamC.setId(3L);
+        teamC.setName("Team C");
+        Team teamD = new Team();
+        teamD.setId(4L);
+        teamD.setName("Team D");
+        Team teamE = new Team();
+        teamE.setId(5L);
+        teamE.setName("Team E");
+        Team teamF = new Team();
+        teamF.setId(6L);
+        teamF.setName("Team F");
+
+        when(tournamentRepository.findById(1L)).thenReturn(Optional.of(tournament));
+        when(registrationRepository.findConfirmedWithTeams(1L, RegistrationStatus.CONFIRMED))
+                .thenReturn(List.of(
+                        createReg(teamA), createReg(teamB), createReg(teamC),
+                        createReg(teamD), createReg(teamE), createReg(teamF)));
+        when(tournamentRepository.save(any(Tournament.class))).thenReturn(tournament);
+
+        List<Round> rounds = tournamentService.generateRounds(1L);
+
+        assertEquals(5, rounds.size());
+
+        int totalMatches = rounds.stream().mapToInt(r -> r.getMatches().size()).sum();
+        assertEquals(15, totalMatches);
+
+        rounds.forEach(round -> assertEquals(3, round.getMatches().size()));
+
+        Set<String> pairs = new HashSet<>();
+        rounds.forEach(round -> round.getMatches().forEach(match -> {
+            long a = match.getHomeTeam().getId();
+            long b = match.getAwayTeam().getId();
+            pairs.add(Math.min(a, b) + "-" + Math.max(a, b));
+        }));
+        assertEquals(15, pairs.size());
     }
 
     @Test
