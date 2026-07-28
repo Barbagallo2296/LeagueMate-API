@@ -28,17 +28,19 @@ Struttura MVC a tre layer rigorosi:
 Controller → Service (interfaccia + impl) → Repository
 ```
 ```
+
 src/main/java/com/leaguemate/api/
 │
-├── controller/          # Endpoint REST
-├── service/             # Interfacce di business logic
-│   └── impl/            # Implementazioni 
-├── repository/          # Interfacce Spring Data JPA
-├── entity/              # Entity JPA su MySQL
-├── dto/                 # Java Records (input/output)
-├── security/            # JWT Filter e SecurityConfig
-└── exception/           # Handler eccezioni
+├── controller/ # Endpoint REST
+├── service/ # Interfacce di business logic
+│ └── impl/ # Implementazioni
+├── repository/ # Interfacce Spring Data JPA
+├── entity/ # Entity JPA su MySQL
+├── dto/ # Java Records (input/output)
+├── security/ # JWT Filter e SecurityConfig
+└── exception/ # Handler eccezioni
 ```
+
 
 ### Moduli funzionali
 
@@ -64,10 +66,10 @@ src/main/java/com/leaguemate/api/
 | `@OneToOne` | `User` ↔ `UserProfile` | FK su `UserProfile`, esposta via `/api/users/{id}/profile` |
 | `@ManyToOne / @OneToMany` | `Tournament` → `Round` → `Match` | Tutte LAZY |
 | `@ManyToMany`  | `Tournament` ↔ `User` (co-organizzatori) | `@JoinTable` su `tournament_organizers` — la relazione non porta attributi propri |
-| `@ManyToMany`| `User` ↔ `Team` tramite `TeamMember` | Attributi: `teamRole`, `joinedAt` |
-| `@ManyToMany`| `Tournament` ↔ `Team` tramite `TournamentRegistration` | Attributi: `status`, `registeredAt` |
+| `@ManyToMany`  | `User` ↔ `Team` tramite `TeamMember` | Attributi: `teamRole`, `joinedAt` |
+| `@ManyToMany`  | `Tournament` ↔ `Team` tramite `TournamentRegistration` | Attributi: `status`, `registeredAt` |
 
-**Scelta progettuale:** dove la relazione N:N porta attributi propri si usa un'entità di giunzione (modellazione corretta); dove non ne porta si usa `@ManyToMany` pura con `@JoinTable`.
+**Scelta progettuale:** dove la relazione N:N porta attributi propri si usa un'entità di giunzione (modellazione corretta); dove non ne porta si usa `@ManyToMany` pura con `@JoinTable`. Nel progetto c'è una sola `@ManyToMany` pura (torneo-organizzatori); le altre due N:N sono modellate con entità di giunzione.
 
 ### Elementi avanzati JPA
 
@@ -237,7 +239,7 @@ Tutti con password `password123`:
 | `shanks_player` | USER |
 | `zoro_player` | USER |
 
-Il torneo di esempio è in stato `DRAFT` con 4 squadre iscritte: è possibile lanciare subito `generate-rounds` e vedere l'algoritmo di Berger all'opera.
+Il torneo di esempio è in stato `DRAFT` con 4 squadre iscritte: è possibile lanciare subito `generate-rounds` e vedere il calendario generato dal metodo del cerchio.
 
 ---
 
@@ -264,14 +266,14 @@ jwt.expiration=${JWT_EXPIRATION:86400000}
 
 ## Testing
 
-**111 test** con JUnit 5, Mockito, Spring Security Test e MockMvc — tutti verdi.
+**112 test** con JUnit 5, Mockito, Spring Security Test e MockMvc — tutti verdi.
 **Code coverage: 89%** (requisito minimo 35%).
 
 ### Test unitari (service, security, exception)
 
 | Classe testata | Test | Descrizione |
 |---|---|---|
-| `TournamentServiceImpl` | 28 | CRUD, **algoritmo di Berger**, **classifica**, **statistiche**, co-organizzatori |
+| `TournamentServiceImpl` | 29 | CRUD, **generazione calendario**, **classifica**, **statistiche**, co-organizzatori |
 | `UserServiceImpl` | 18 | Registrazione, ruoli, **profilo con autorizzazione a livello di risorsa** |
 | `TeamServiceImpl` | 9 | CRUD completo, unicità nome, vincoli di cancellazione |
 | `TeamMemberServiceImpl` | 9 | Aggiunta membri, duplicati, rimozione |
