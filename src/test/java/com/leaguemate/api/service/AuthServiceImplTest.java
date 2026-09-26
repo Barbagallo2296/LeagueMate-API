@@ -13,7 +13,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -70,7 +73,8 @@ class AuthServiceImplTest {
         String password = "password123";
         String expectedToken = "mocked-jwt-token";
 
-        Mockito.when(userService.findByUsername(username)).thenReturn(sampleUser);
+        Mockito.when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
+                .thenReturn(new UsernamePasswordAuthenticationToken(sampleUser, null, List.of()));
         Mockito.when(jwtService.generateToken(sampleUser)).thenReturn(expectedToken);
 
         String token = authService.login(username, password);
@@ -80,7 +84,7 @@ class AuthServiceImplTest {
         Mockito.verify(authenticationManager, Mockito.times(1)).authenticate(
                 any(UsernamePasswordAuthenticationToken.class)
         );
-        Mockito.verify(userService, Mockito.times(1)).findByUsername(username);
+        Mockito.verify(userService, Mockito.never()).findByUsername(anyString());
         Mockito.verify(jwtService, Mockito.times(1)).generateToken(sampleUser);
     }
 
@@ -97,6 +101,6 @@ class AuthServiceImplTest {
                 any(UsernamePasswordAuthenticationToken.class)
         );
         Mockito.verify(userService, Mockito.never()).findByUsername(anyString());
-        Mockito.verify(jwtService, Mockito.never()).generateToken(any(User.class));
+        Mockito.verify(jwtService, Mockito.never()).generateToken(any(UserDetails.class));
     }
 }

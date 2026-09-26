@@ -21,5 +21,5 @@ public interface UserService {
 
     UserProfileResponse getProfile(Long userId);
 
-    UserProfileResponse updateProfile(Long userId, UpdateUserProfileRequest request, String requesterUsername);
+    UserProfileResponse updateProfile(Long userId, UpdateUserProfileRequest request, User requester);
 }

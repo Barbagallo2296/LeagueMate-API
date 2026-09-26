@@ -90,6 +90,20 @@ class TournamentServiceImplTest {
         return reg;
     }
 
+    private MatchRepository.StatusCount statusCount(MatchStatus status, long total) {
+        return new MatchRepository.StatusCount() {
+            @Override
+            public MatchStatus getStatus() {
+                return status;
+            }
+
+            @Override
+            public long getTotal() {
+                return total;
+            }
+        };
+    }
+
     private Match completedMatch(Team home, Team away, int homeScore, int awayScore) {
         Match match = new Match();
         match.setHomeTeam(home);
@@ -514,9 +528,7 @@ class TournamentServiceImplTest {
     @Test
     void getTournamentStats_ReturnsCorrectStats() {
         when(tournamentRepository.findById(1L)).thenReturn(Optional.of(tournament));
-        when(registrationRepository.countConfirmedTeams(1L, RegistrationStatus.CONFIRMED)).thenReturn(2L);
-        when(matchRepository.countMatchesByTournamentAndStatus(1L, MatchStatus.COMPLETED)).thenReturn(1L);
-        when(matchRepository.countMatchesByTournamentAndStatus(1L, MatchStatus.SCHEDULED)).thenReturn(0L);
+        when(matchRepository.countByStatus(1L)).thenReturn(List.of(statusCount(MatchStatus.COMPLETED, 1L)));
         when(registrationRepository.findConfirmedWithTeams(1L, RegistrationStatus.CONFIRMED))
                 .thenReturn(List.of(createReg(teamA), createReg(teamB)));
         when(matchRepository.findCompletedMatchesWithTeams(1L, MatchStatus.COMPLETED))
@@ -536,9 +548,7 @@ class TournamentServiceImplTest {
     @Test
     void getTournamentStats_HandlesTournamentWithoutPlayedMatches() {
         when(tournamentRepository.findById(1L)).thenReturn(Optional.of(tournament));
-        when(registrationRepository.countConfirmedTeams(1L, RegistrationStatus.CONFIRMED)).thenReturn(2L);
-        when(matchRepository.countMatchesByTournamentAndStatus(1L, MatchStatus.COMPLETED)).thenReturn(0L);
-        when(matchRepository.countMatchesByTournamentAndStatus(1L, MatchStatus.SCHEDULED)).thenReturn(6L);
+        when(matchRepository.countByStatus(1L)).thenReturn(List.of(statusCount(MatchStatus.SCHEDULED, 6L)));
         when(registrationRepository.findConfirmedWithTeams(1L, RegistrationStatus.CONFIRMED))
                 .thenReturn(List.of(createReg(teamA), createReg(teamB)));
         when(matchRepository.findCompletedMatchesWithTeams(1L, MatchStatus.COMPLETED))
@@ -546,6 +556,7 @@ class TournamentServiceImplTest {
 
         TournamentStatsResponse stats = tournamentService.getTournamentStats(1L);
 
+        assertEquals(2L, stats.registeredTeams());
         assertEquals(0L, stats.playedMatches());
         assertEquals(6L, stats.remainingMatches());
         assertEquals(0, stats.totalGoals());

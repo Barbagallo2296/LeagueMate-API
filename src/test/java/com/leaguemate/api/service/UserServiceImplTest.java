@@ -223,10 +223,9 @@ class UserServiceImplTest {
         user.setProfile(profile);
 
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
-        when(userRepository.findByUsername("manuel22")).thenReturn(Optional.of(user));
         when(userRepository.save(any(User.class))).thenReturn(user);
 
-        UserProfileResponse response = userService.updateProfile(1L, profileRequest, "manuel22");
+        UserProfileResponse response = userService.updateProfile(1L, profileRequest, user);
 
         assertEquals("Full Stack Developer", response.bio());
         assertEquals("+39 333 1234567", response.phoneNumber());
@@ -241,10 +240,9 @@ class UserServiceImplTest {
         intruder.setRole(Role.USER);
 
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
-        when(userRepository.findByUsername("doc_friend")).thenReturn(Optional.of(intruder));
 
         assertThrows(AccessDeniedException.class,
-                () -> userService.updateProfile(1L, profileRequest, "doc_friend"));
+                () -> userService.updateProfile(1L, profileRequest, intruder));
         verify(userRepository, never()).save(any(User.class));
     }
 
@@ -261,10 +259,9 @@ class UserServiceImplTest {
         admin.setRole(Role.ADMIN);
 
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
-        when(userRepository.findByUsername("bossman")).thenReturn(Optional.of(admin));
         when(userRepository.save(any(User.class))).thenReturn(user);
 
-        UserProfileResponse response = userService.updateProfile(1L, profileRequest, "bossman");
+        UserProfileResponse response = userService.updateProfile(1L, profileRequest, admin);
 
         assertEquals("Full Stack Developer", response.bio());
         verify(userRepository, times(1)).save(user);
@@ -275,10 +272,9 @@ class UserServiceImplTest {
         assertNull(user.getProfile());
 
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
-        when(userRepository.findByUsername("manuel22")).thenReturn(Optional.of(user));
         when(userRepository.save(any(User.class))).thenReturn(user);
 
-        UserProfileResponse response = userService.updateProfile(1L, profileRequest, "manuel22");
+        UserProfileResponse response = userService.updateProfile(1L, profileRequest, user);
 
         assertNotNull(user.getProfile());
         assertEquals("Full Stack Developer", response.bio());

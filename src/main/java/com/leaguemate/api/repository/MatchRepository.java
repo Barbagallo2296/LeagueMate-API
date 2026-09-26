@@ -13,6 +13,19 @@ import java.util.Optional;
 @Repository
 public interface MatchRepository extends JpaRepository<Match, Long> {
 
+    interface StatusCount {
+        MatchStatus getStatus();
+        long getTotal();
+    }
+
+    @Query("""
+            SELECT m.status AS status, COUNT(m) AS total
+            FROM Match m
+            WHERE m.round.tournament.id = :tournamentId
+            GROUP BY m.status
+            """)
+    List<StatusCount> countByStatus(@Param("tournamentId") Long tournamentId);
+
     List<Match> findByRoundId(Long roundId);
 
     List<Match> findByRoundTournamentIdAndStatus(Long tournamentId, MatchStatus status);

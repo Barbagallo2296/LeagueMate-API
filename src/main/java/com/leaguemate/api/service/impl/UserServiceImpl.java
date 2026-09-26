@@ -89,9 +89,8 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public UserProfileResponse updateProfile(Long userId,
                                              UpdateUserProfileRequest request,
-                                             String requesterUsername) {
+                                             User requester) {
         User target = findById(userId);
-        User requester = findByUsername(requesterUsername);
 
         boolean isOwner = target.getId().equals(requester.getId());
         boolean isAdmin = requester.getRole() == Role.ADMIN;

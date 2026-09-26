@@ -1,5 +1,7 @@
 # LeagueMate API
 
+[![CI](https://github.com/Barbagallo2296/LeagueMate-API/actions/workflows/ci.yml/badge.svg)](https://github.com/Barbagallo2296/LeagueMate-API/actions/workflows/ci.yml)
+
 Backend REST per la gestione di tornei amatoriali di calcio a girone all'italiana.
 
 
@@ -15,6 +17,10 @@ Backend REST per la gestione di tornei amatoriali di calcio a girone all'italian
 | H2 (solo test) | in memoria |
 | JWT (jjwt) | 0.12.6 |
 | Flyway | 12.x |
+| Spring Boot Actuator | 4.1.x |
+| springdoc-openapi (Swagger UI) | 3.1.x |
+| Bucket4j | 8.x |
+| Testcontainers | 2.x |
 | Lombok | 1.18.x |
 | JaCoCo | 0.8.12 |
 | Maven | 3.x |
@@ -37,6 +43,7 @@ src/main/java/com/leaguemate/api/
 │ └── impl/ # Implementazioni
 ├── repository/ # Interfacce Spring Data JPA
 ├── entity/ # Entity JPA su MySQL
+├── config/ # Configurazione OpenAPI
 ├── dto/ # Java Records (input/output)
 ├── mapper/ # Conversione Entity → DTO, in un unico punto
 ├── security/ # JWT Filter, SecurityConfig, ownership dei tornei
@@ -86,7 +93,7 @@ I mapper sono classi statiche senza stato. I service restituiscono un DTO quando
 | `FetchType.LAZY` | Tutte le relazioni `@ManyToOne` e `@ManyToMany` | Evita query non necessarie |
 | **JPQL con `@Query` + `@Param`** | `MatchRepository`, `TournamentRepository`, `TournamentRegistrationRepository`, `TeamMemberRepository` | Query esplicite e type-safe |
 | **`JOIN FETCH`** | `findCompletedMatchesWithTeams()`, `findByRoundIdWithTeams()`, `findConfirmedWithTeams()`, `findByIdWithTeams()`, `findByTeamIdWithUserAndTeam()` | **Risolve problemi N+1 reali** nel calcolo della classifica e nell'elenco dei membri |
-| **Query di aggregazione (`COUNT`)** | `countMatchesByTournamentAndStatus()`, `countConfirmedTeams()`, `countByRole()` | Statistiche e regole di dominio |
+| **Query di aggregazione (`COUNT`, `GROUP BY`)** | `countByStatus()` (proiezione a interfaccia), `countMatchesByTournamentAndStatus()`, `countByRole()` | Statistiche e regole di dominio |
 | **Query derivate dal nome** | `existsByTeamIdAndUserId()`, `existsByUsername()`, `countByRole()` | Controlli senza caricare intere tabelle |
 | **`@EntityGraph`** | `findWithRegistrationsById()` | Fetch dichiarativo, usato nell'iscrizione delle squadre |
 
@@ -159,6 +166,7 @@ return table.values().stream()
 - L'email di un utente è visibile solo all'utente stesso o a un `ADMIN`
 - Nessun secret JWT di default: senza `JWT_SECRET` (Base64, almeno 256 bit) l'applicazione non parte
 - Messaggi di errore generici in fase di login per prevenire la *user enumeration*
+- **Rate limit sul login** (`LoginRateLimitFilter`, Bucket4j): 10 tentativi al minuto per IP, oltre i quali la risposta è `429 Too Many Requests` con header `Retry-After`. Configurabile con `LOGIN_RATE_LIMIT_CAPACITY` e `LOGIN_RATE_LIMIT_PERIOD`
 
 ---
 
@@ -249,6 +257,14 @@ Le liste di tornei, squadre e utenti sono **paginate**: `?page=0&size=20&sort=na
 
 ---
 
+## Documentazione API e health check
+
+- **Swagger UI**: `http://localhost:8080/swagger-ui.html` — documentazione interattiva di tutti gli endpoint. Con il pulsante *Authorize* si incolla il token JWT ottenuto dal login. Disattivabile con `SWAGGER_ENABLED=false`.
+- **Specifica OpenAPI**: `http://localhost:8080/v3/api-docs`
+- **Health check**: `http://localhost:8080/actuator/health` — pubblico, restituisce solo `{"status":"UP"}`. Nessun altro endpoint di Actuator è esposto.
+
+---
+
 ## Avvio con Docker (consigliato)
 
 ```bash
@@ -256,7 +272,7 @@ cp .env.example .env              # poi impostare JWT_SECRET (openssl rand -base
 docker compose up --build
 ```
 
-Un solo comando avvia MySQL 8 e l'applicazione. All'avvio Flyway applica le migrazioni dello schema e carica i dati demo. Il Dockerfile usa un multi-stage build (Maven → JRE), MySQL ha un healthcheck e l'app attende che sia pronto.
+Un solo comando avvia MySQL 8 e l'applicazione. All'avvio Flyway applica le migrazioni dello schema e carica i dati demo. Il Dockerfile scarica le dipendenze Maven in un layer separato (le build successive riusano la cache se il `pom.xml` non cambia), l'applicazione gira con un utente non-root e il container ha un `HEALTHCHECK` sull'endpoint di Actuator. Il build è multi-stage (Maven → JRE), MySQL ha un healthcheck e l'app attende che sia pronto.
 
 ### Utenti precaricati
 
@@ -298,7 +314,7 @@ export FLYWAY_LOCATIONS=classpath:db/migration,classpath:db/demo   # facoltativo
 
 ## Testing
 
-**132 test** con JUnit 5, Mockito, Spring Security Test e MockMvc — tutti verdi.
+**139 test** con JUnit 5, Mockito, Spring Security Test e MockMvc — tutti verdi.
 **Code coverage: 92%** (requisito minimo 35%).
 
 ### Test unitari (service, security, exception)
@@ -322,19 +338,22 @@ export FLYWAY_LOCATIONS=classpath:db/migration,classpath:db/demo   # facoltativo
 |---|---|---|
 | `AuthIntegrationTest` | 10 | Flusso register→login→endpoint protetto, RBAC, 401 identici, password mai esposta |
 | `TournamentFlowIntegrationTest` | 10 | Ciclo di vita completo del torneo end-to-end |
+| `InfrastructureIntegrationTest` | 6 | Rate limit sul login, health check, specifica OpenAPI |
+| `MySqlSchemaIntegrationTest` | 1 | Migrazioni Flyway e dati demo su **MySQL 8 reale** (Testcontainers) |
 | `AuthorizationRulesIntegrationTest` | 11 | Ownership dei tornei, chiusura torneo, andata e ritorno, paginazione, membri, privacy email, 401/400 |
 | `ApiApplicationTests` | 1 | Caricamento del contesto Spring |
 
-I test di integrazione girano su un database H2 in memoria (profilo `test`) su cui Flyway applica le stesse migrazioni della produzione, quindi l'intera suite si esegue senza un MySQL attivo.
+I test di integrazione girano su un database H2 in memoria (profilo `test`) su cui Flyway applica le stesse migrazioni della produzione, quindi la suite si esegue senza un MySQL attivo. `MySqlSchemaIntegrationTest` avvia invece un MySQL 8 in un container: gira quando Docker è disponibile (sempre in CI) e viene saltato altrimenti.
 
 ### Coverage per package
 
 | Package | Coverage |
 |---|---|
-| `security` | 96% |
+| `security` | 97% |
 | `exception` | 82% |
 | `service.impl` | 97% |
 | `mapper` | 99% |
+| `config` | 100% |
 | `controller` | 73% |
 | **Totale** | **92%** |
 
@@ -344,6 +363,10 @@ I test di integrazione girano su un database H2 in memoria (profilo `test`) su c
 ./mvnw clean test
 ```
 Report JaCoCo in `target/site/jacoco/index.html`.
+
+### Integrazione continua
+
+A ogni push su `main` e a ogni pull request GitHub Actions (`.github/workflows/ci.yml`) esegue `mvnw verify` con JDK 21, incluso il test su MySQL reale, e pubblica il report JaCoCo come artifact.
 
 ---
 

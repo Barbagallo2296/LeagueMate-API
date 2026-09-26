@@ -74,7 +74,7 @@ public class UserController {
             @Valid @RequestBody UpdateUserProfileRequest request,
             @AuthenticationPrincipal User currentUser
     ) {
-        UserProfileResponse updated = userService.updateProfile(id, request, currentUser.getUsername());
+        UserProfileResponse updated = userService.updateProfile(id, request, currentUser);
         return ResponseEntity.ok(updated);
     }
 }

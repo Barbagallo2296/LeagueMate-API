@@ -27,14 +27,4 @@ public interface TournamentRegistrationRepository extends JpaRepository<Tourname
             @Param("tournamentId") Long tournamentId,
             @Param("status") RegistrationStatus status
     );
-
-    @Query("""
-            SELECT COUNT(r) FROM TournamentRegistration r
-            WHERE r.tournament.id = :tournamentId
-              AND r.status = :status
-            """)
-    long countConfirmedTeams(
-            @Param("tournamentId") Long tournamentId,
-            @Param("status") RegistrationStatus status
-    );
 }

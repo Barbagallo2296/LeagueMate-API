@@ -286,8 +286,11 @@ public class TournamentServiceImpl implements TournamentService {
     @Override
     @Transactional(readOnly = true)
     public List<StandingEntry> calculateStandings(Long tournamentId) {
-        Tournament tournament = getTournamentById(tournamentId);
+        return computeStandings(getTournamentById(tournamentId));
+    }
 
+    private List<StandingEntry> computeStandings(Tournament tournament) {
+        Long tournamentId = tournament.getId();
         Map<Long, TeamStats> table = new LinkedHashMap<>();
 
         registrationRepository.findConfirmedWithTeams(tournamentId, RegistrationStatus.CONFIRMED)
@@ -333,16 +336,14 @@ public class TournamentServiceImpl implements TournamentService {
     public TournamentStatsResponse getTournamentStats(Long tournamentId) {
         Tournament tournament = getTournamentById(tournamentId);
 
-        long registeredTeams = registrationRepository.countConfirmedTeams(
-                tournamentId, RegistrationStatus.CONFIRMED);
+        List<StandingEntry> standings = computeStandings(tournament);
+        long registeredTeams = standings.size();
 
-        long playedMatches = matchRepository.countMatchesByTournamentAndStatus(
-                tournamentId, MatchStatus.COMPLETED);
-
-        long scheduledMatches = matchRepository.countMatchesByTournamentAndStatus(
-                tournamentId, MatchStatus.SCHEDULED);
-
-        List<StandingEntry> standings = calculateStandings(tournamentId);
+        Map<MatchStatus, Long> countsByStatus = new EnumMap<>(MatchStatus.class);
+        matchRepository.countByStatus(tournamentId)
+                .forEach(row -> countsByStatus.put(row.getStatus(), row.getTotal()));
+        long playedMatches = countsByStatus.getOrDefault(MatchStatus.COMPLETED, 0L);
+        long scheduledMatches = countsByStatus.getOrDefault(MatchStatus.SCHEDULED, 0L);
 
         int totalGoals = standings.stream()
                 .mapToInt(StandingEntry::goalsFor)
