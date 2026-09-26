@@ -21,7 +21,8 @@ public interface MatchRepository extends JpaRepository<Match, Long> {
             SELECT m FROM Match m
             JOIN FETCH m.homeTeam
             JOIN FETCH m.awayTeam
-            JOIN FETCH m.round
+            JOIN FETCH m.round r
+            JOIN FETCH r.tournament
             WHERE m.id = :id
             """)
     Optional<Match> findByIdWithTeams(@Param("id") Long id);
@@ -48,6 +49,17 @@ public interface MatchRepository extends JpaRepository<Match, Long> {
             ORDER BY m.id
             """)
     List<Match> findByRoundIdWithTeams(@Param("roundId") Long roundId);
+
+    @Query("""
+            SELECT CASE WHEN COUNT(m) > 0 THEN true ELSE false END
+            FROM Match m
+            JOIN m.round r
+            JOIN r.tournament t
+            JOIN t.organizers o
+            WHERE m.id = :matchId
+              AND o.username = :username
+            """)
+    boolean isTournamentOrganizer(@Param("matchId") Long matchId, @Param("username") String username);
 
     @Query("""
             SELECT COUNT(m) FROM Match m

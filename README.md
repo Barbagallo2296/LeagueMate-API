@@ -125,6 +125,8 @@ return table.values().stream()
 - Il calendario può essere generato **solo in stato `DRAFT`**
 - Un torneo `COMPLETED` non può essere modificato
 - Un torneo `ACTIVE` non può essere eliminato
+- I risultati si inseriscono solo in un torneo `ACTIVE`
+- Un torneo si chiude (`ACTIVE → COMPLETED`) solo quando tutte le partite sono state giocate; da quel momento i risultati sono bloccati
 - Non è possibile declassare l'ultimo `ADMIN` rimasto
 
 ---
@@ -136,6 +138,10 @@ return table.values().stream()
 - Password hashate con **BCrypt**
 - Autorizzazione **per ruolo** (RBAC) tramite `@PreAuthorize` e `@EnableMethodSecurity`
 - Autorizzazione **a livello di risorsa**: un utente può modificare solo il proprio profilo, un `ADMIN` qualsiasi profilo
+- **Ownership dei tornei**: chi crea un torneo ne diventa organizzatore; un `ORGANIZER` può gestire (modifica, iscrizioni, calendario, risultati, chiusura, co-organizzatori) **solo i tornei di cui è organizzatore**, tramite il bean `TournamentSecurity` usato nelle espressioni `@PreAuthorize`. Un `ADMIN` può gestire qualsiasi torneo
+- Richiesta senza token → `401`; autenticato ma senza permessi → `403` (`AuthenticationEntryPoint` e `AccessDeniedHandler` dedicati)
+- L'email di un utente è visibile solo all'utente stesso o a un `ADMIN`
+- Nessun secret JWT di default: senza `JWT_SECRET` (Base64, almeno 256 bit) l'applicazione non parte
 - Messaggi di errore generici in fase di login per prevenire la *user enumeration*
 
 ---
@@ -147,17 +153,21 @@ return table.values().stream()
 | Eccezione | HTTP Status |
 |---|---|
 | `MethodArgumentNotValidException` | `400 Bad Request` |
+| `HttpMessageNotReadableException` (JSON malformato) | `400 Bad Request` |
+| `MethodArgumentTypeMismatchException` (path variable non valido) | `400 Bad Request` |
 | `AuthenticationException` | `401 Unauthorized` |
 | `AccessDeniedException` | `403 Forbidden` |
-| `ResourceNotFoundException` | `404 Not Found` |
-| `ResourceConflictException` | `409 Conflict` |
-| `Exception` (fallback) | `500 Internal Server Error` |
+| `ResourceNotFoundException`, `NoResourceFoundException` | `404 Not Found` |
+| `HttpRequestMethodNotSupportedException` | `405 Method Not Allowed` |
+| `ResourceConflictException`, `DataIntegrityViolationException` | `409 Conflict` |
+| `HttpMediaTypeNotSupportedException` | `415 Unsupported Media Type` |
+| `Exception` (fallback, con stack trace nei log) | `500 Internal Server Error` |
 
-Il `401` da token JWT non valido è gestito direttamente nel `JwtAuthFilter`, poiché l'eccezione nasce prima del `DispatcherServlet` e non è intercettabile dal `@RestControllerAdvice`.
+Gli errori che nascono nella filter chain di Spring Security (token non valido, token mancante, accesso negato a livello URL) avvengono prima del `DispatcherServlet` e non sono intercettabili dal `@RestControllerAdvice`: li scrive `SecurityErrorResponse`, con lo stesso formato JSON.
 
 ---
 
-## Endpoint REST — 31 totali
+## Endpoint REST — 32 totali
 
 ### Auth (2)
 | Metodo | Endpoint | Accesso |
@@ -175,26 +185,27 @@ Il `401` da token JWT non valido è gestito direttamente nel `JwtAuthFilter`, po
 | GET | `/api/users/{id}/profile` | Autenticato |
 | PUT | `/api/users/{id}/profile` | Proprietario o **ADMIN** |
 
-### Tornei (10)
+### Tornei (11)
 | Metodo | Endpoint | Accesso |
 |---|---|---|
 | POST | `/api/tournaments` | **ADMIN / ORGANIZER** |
 | GET | `/api/tournaments` | Autenticato |
 | GET | `/api/tournaments/{id}` | Autenticato |
 | GET | `/api/tournaments/status/{status}` | Autenticato |
-| PUT | `/api/tournaments/{id}` | **ADMIN / ORGANIZER** |
+| PUT | `/api/tournaments/{id}` | **ADMIN / organizzatore del torneo** |
 | DELETE | `/api/tournaments/{id}` | **ADMIN** |
-| POST | `/api/tournaments/{id}/register-team/{teamId}` | **ADMIN / ORGANIZER** |
-| POST | `/api/tournaments/{id}/generate-rounds` | **ADMIN / ORGANIZER** |
+| POST | `/api/tournaments/{id}/register-team/{teamId}` | **ADMIN / organizzatore del torneo** |
+| POST | `/api/tournaments/{id}/generate-rounds` | **ADMIN / organizzatore del torneo** |
+| POST | `/api/tournaments/{id}/complete` | **ADMIN / organizzatore del torneo** |
 | GET | `/api/tournaments/{id}/standings` | Autenticato |
 | GET | `/api/tournaments/{id}/stats` | Autenticato |
 
 ### Co-organizzatori — `@ManyToMany` (3)
 | Metodo | Endpoint | Accesso |
 |---|---|---|
-| POST | `/api/tournaments/{id}/organizers/{userId}` | **ADMIN / ORGANIZER** |
+| POST | `/api/tournaments/{id}/organizers/{userId}` | **ADMIN / organizzatore del torneo** |
 | GET | `/api/tournaments/{id}/organizers` | Autenticato |
-| DELETE | `/api/tournaments/{id}/organizers/{userId}` | **ADMIN / ORGANIZER** |
+| DELETE | `/api/tournaments/{id}/organizers/{userId}` | **ADMIN / organizzatore del torneo** |
 
 ### Squadre (5)
 | Metodo | Endpoint | Accesso |
@@ -215,7 +226,7 @@ Il `401` da token JWT non valido è gestito direttamente nel `JwtAuthFilter`, po
 ### Partite (2)
 | Metodo | Endpoint | Accesso |
 |---|---|---|
-| PUT | `/api/matches/{id}/result` | **ADMIN / ORGANIZER** |
+| PUT | `/api/matches/{id}/result` | **ADMIN / organizzatore del torneo** |
 | GET | `/api/matches/round/{roundId}` | Autenticato |
 
 ---
@@ -223,6 +234,7 @@ Il `401` da token JWT non valido è gestito direttamente nel `JwtAuthFilter`, po
 ## Avvio con Docker (consigliato)
 
 ```bash
+cp .env.example .env              # poi impostare JWT_SECRET (openssl rand -base64 32)
 docker compose up --build
 ```
 
@@ -239,7 +251,7 @@ Tutti con password `password123`:
 | `shanks_player` | USER |
 | `zoro_player` | USER |
 
-Il torneo di esempio è in stato `DRAFT` con 4 squadre iscritte: è possibile lanciare subito `generate-rounds` e vedere il calendario generato dal metodo del cerchio.
+Il torneo di esempio è in stato `DRAFT` con 4 squadre iscritte e `law_organizer` come organizzatore: è possibile lanciare subito `generate-rounds` e vedere il calendario generato dal metodo del cerchio.
 
 ---
 
@@ -248,17 +260,18 @@ Il torneo di esempio è in stato `DRAFT` con 4 squadre iscritte: è possibile la
 ### Prerequisiti
 Java 21, Maven 3.x, MySQL 8.x
 
-Ogni proprietà in `application.properties` è sovrascrivibile da variabile d'ambiente e ha un default valido per lo sviluppo locale:
+Ogni proprietà in `application.properties` è sovrascrivibile da variabile d'ambiente. Il datasource ha un default per lo sviluppo locale; `JWT_SECRET` invece è **obbligatorio** e non ha default:
 
 ```properties
 spring.datasource.url=${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/leaguemate_db?createDatabaseIfNotExist=true}
 spring.datasource.username=${SPRING_DATASOURCE_USERNAME:root}
 spring.datasource.password=${SPRING_DATASOURCE_PASSWORD:root}
-jwt.secret=${JWT_SECRET:<chiave-Base64>}
+jwt.secret=${JWT_SECRET}
 jwt.expiration=${JWT_EXPIRATION:86400000}
 ```
 
 ```bash
+export JWT_SECRET=$(openssl rand -base64 32)
 ./mvnw spring-boot:run
 ```
 
@@ -266,20 +279,20 @@ jwt.expiration=${JWT_EXPIRATION:86400000}
 
 ## Testing
 
-**112 test** con JUnit 5, Mockito, Spring Security Test e MockMvc — tutti verdi.
-**Code coverage: 89%** (requisito minimo 35%).
+**129 test** con JUnit 5, Mockito, Spring Security Test e MockMvc — tutti verdi.
+**Code coverage: 91%** (requisito minimo 35%).
 
 ### Test unitari (service, security, exception)
 
 | Classe testata | Test | Descrizione |
 |---|---|---|
-| `TournamentServiceImpl` | 29 | CRUD, **generazione calendario**, **classifica**, **statistiche**, co-organizzatori |
+| `TournamentServiceImpl` | 33 | CRUD, **generazione calendario**, **classifica**, **statistiche**, co-organizzatori, chiusura torneo |
 | `UserServiceImpl` | 18 | Registrazione, ruoli, **profilo con autorizzazione a livello di risorsa** |
 | `TeamServiceImpl` | 9 | CRUD completo, unicità nome, vincoli di cancellazione |
-| `TeamMemberServiceImpl` | 9 | Aggiunta membri, duplicati, rimozione |
+| `TeamMemberServiceImpl` | 10 | Aggiunta membri, duplicati, rimozione vincolata alla squadra |
 | `GlobalExceptionHandler` | 7 | 400, 401, 404, 409, 500 e mascheramento messaggi |
-| `MatchServiceImpl` | 5 | Aggiornamento risultato, caricamento eager |
-| `JwtService` | 4 | Generazione, estrazione, validazione token |
+| `MatchServiceImpl` | 6 | Aggiornamento risultato, blocco su torneo non attivo, caricamento eager |
+| `JwtService` | 6 | Generazione, estrazione, validazione token, rifiuto di secret mancanti o corti |
 | `JwtAuthFilter` | 4 | Token valido, mancante, malformato |
 | `AuthServiceImpl` | 3 | Registrazione con hashing, login |
 | `TournamentControllerSecurityTest` | 3 | **403 con USER, 201 con ORGANIZER** (`@WebMvcTest`) |
@@ -290,6 +303,7 @@ jwt.expiration=${JWT_EXPIRATION:86400000}
 |---|---|---|
 | `AuthIntegrationTest` | 10 | Flusso register→login→endpoint protetto, RBAC, 401 identici, password mai esposta |
 | `TournamentFlowIntegrationTest` | 10 | Ciclo di vita completo del torneo end-to-end |
+| `AuthorizationRulesIntegrationTest` | 9 | Ownership dei tornei, chiusura torneo, membri, privacy email, 401/400 |
 | `ApiApplicationTests` | 1 | Caricamento del contesto Spring |
 
 I test di integrazione girano su un database H2 in memoria (profilo `test`), quindi l'intera suite si esegue senza un MySQL attivo.
@@ -298,11 +312,11 @@ I test di integrazione girano su un database H2 in memoria (profilo `test`), qui
 
 | Package | Coverage |
 |---|---|
-| `security` | 100% |
-| `exception` | 100% |
-| `service.impl` | 96% |
-| `controller` | 60% |
-| **Totale** | **89%** |
+| `security` | 96% |
+| `exception` | 81% |
+| `service.impl` | 97% |
+| `controller` | 75% |
+| **Totale** | **91%** |
 
 > `dto` ed `entity` sono esclusi dal report (boilerplate Lombok). I controller sono **inclusi** e coperti dai test di integrazione.
 

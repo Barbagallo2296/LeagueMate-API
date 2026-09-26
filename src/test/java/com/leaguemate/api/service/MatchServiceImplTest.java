@@ -4,6 +4,9 @@ import com.leaguemate.api.entity.Match;
 import com.leaguemate.api.entity.MatchStatus;
 import com.leaguemate.api.entity.Round;
 import com.leaguemate.api.entity.Team;
+import com.leaguemate.api.entity.Tournament;
+import com.leaguemate.api.entity.TournamentStatus;
+import com.leaguemate.api.exception.ResourceConflictException;
 import com.leaguemate.api.exception.ResourceNotFoundException;
 import com.leaguemate.api.repository.MatchRepository;
 import com.leaguemate.api.service.impl.MatchServiceImpl;
@@ -42,9 +45,14 @@ class MatchServiceImplTest {
         away.setId(2L);
         away.setName("Heart Pirates");
 
+        Tournament tournament = new Tournament();
+        tournament.setId(1L);
+        tournament.setStatus(TournamentStatus.ACTIVE);
+
         Round round = new Round();
         round.setId(1L);
         round.setRoundNumber(1);
+        round.setTournament(tournament);
 
         match = new Match();
         match.setId(1L);
@@ -73,6 +81,16 @@ class MatchServiceImplTest {
 
         assertThrows(ResourceNotFoundException.class,
                 () -> matchService.updateMatchResult(99L, 1, 0));
+        verify(matchRepository, never()).save(any(Match.class));
+    }
+
+    @Test
+    void updateMatchResult_ThrowsConflict_WhenTournamentIsCompleted() {
+        match.getRound().getTournament().setStatus(TournamentStatus.COMPLETED);
+        when(matchRepository.findByIdWithTeams(1L)).thenReturn(Optional.of(match));
+
+        assertThrows(ResourceConflictException.class,
+                () -> matchService.updateMatchResult(1L, 2, 0));
         verify(matchRepository, never()).save(any(Match.class));
     }
 

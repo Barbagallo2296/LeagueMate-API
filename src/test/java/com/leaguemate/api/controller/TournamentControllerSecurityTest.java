@@ -20,6 +20,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -65,7 +66,7 @@ class TournamentControllerSecurityTest {
         created.setSeason("2025/2026");
         created.setStatus(TournamentStatus.DRAFT);
 
-        when(tournamentService.createTournament(any(Tournament.class))).thenReturn(created);
+        when(tournamentService.createTournament(any(Tournament.class), anyString())).thenReturn(created);
 
         mockMvc.perform(post("/api/tournaments")
                         .contentType(MediaType.APPLICATION_JSON)

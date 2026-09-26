@@ -69,9 +69,15 @@ public class TournamentServiceImpl implements TournamentService {
 
     @Override
     @Transactional
-    public Tournament createTournament(Tournament tournament) {
+    public Tournament createTournament(Tournament tournament, String creatorUsername) {
+        User creator = userRepository.findByUsername(creatorUsername)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with username: " + creatorUsername));
+
         tournament.setStatus(TournamentStatus.DRAFT);
         tournament.setCreatedAt(LocalDateTime.now());
+        // Chi crea il torneo ne è il primo organizzatore: senza questo passaggio
+        // un ORGANIZER non potrebbe gestire il torneo appena creato.
+        tournament.getOrganizers().add(creator);
         return tournamentRepository.save(tournament);
     }
 
@@ -228,6 +234,26 @@ public class TournamentServiceImpl implements TournamentService {
 
         tournamentRepository.save(tournament);
         return tournament.getRounds();
+    }
+
+    @Override
+    @Transactional
+    public Tournament completeTournament(Long tournamentId) {
+        Tournament tournament = getTournamentById(tournamentId);
+
+        if (tournament.getStatus() != TournamentStatus.ACTIVE) {
+            throw new ResourceConflictException(
+                    "Only an ACTIVE tournament can be completed. Current status: " + tournament.getStatus());
+        }
+
+        long remaining = matchRepository.countMatchesByTournamentAndStatus(tournamentId, MatchStatus.SCHEDULED);
+        if (remaining > 0) {
+            throw new ResourceConflictException(
+                    "Cannot complete the tournament: " + remaining + " matches still to be played");
+        }
+
+        tournament.setStatus(TournamentStatus.COMPLETED);
+        return tournamentRepository.save(tournament);
     }
 
     @Override

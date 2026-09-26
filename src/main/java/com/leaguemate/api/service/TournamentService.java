@@ -12,7 +12,7 @@ import java.util.List;
 
 public interface TournamentService {
 
-    Tournament createTournament(Tournament tournament);
+    Tournament createTournament(Tournament tournament, String creatorUsername);
     Tournament getTournamentById(Long id);
     List<Tournament> getAllTournaments();
     List<Tournament> getTournamentsByStatus(TournamentStatus status);
@@ -22,6 +22,8 @@ public interface TournamentService {
     TournamentRegistration registerTeamToTournament(Long tournamentId, Long teamId);
 
     List<Round> generateRounds(Long tournamentId);
+
+    Tournament completeTournament(Long tournamentId);
 
     List<StandingEntry> calculateStandings(Long tournamentId);
 

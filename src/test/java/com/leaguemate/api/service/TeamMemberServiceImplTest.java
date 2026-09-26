@@ -140,18 +140,28 @@ class TeamMemberServiceImplTest {
 
     @Test
     void removeMemberFromTeam_Success() {
-        when(teamMemberRepository.findById(1L)).thenReturn(Optional.of(member));
+        when(teamMemberRepository.findByIdAndTeamId(1L, 1L)).thenReturn(Optional.of(member));
 
-        teamMemberService.removeMemberFromTeam(1L);
+        teamMemberService.removeMemberFromTeam(1L, 1L);
 
         verify(teamMemberRepository, times(1)).delete(member);
     }
 
     @Test
     void removeMemberFromTeam_ThrowsNotFound_WhenMemberDoesNotExist() {
-        when(teamMemberRepository.findById(99L)).thenReturn(Optional.empty());
+        when(teamMemberRepository.findByIdAndTeamId(99L, 1L)).thenReturn(Optional.empty());
 
         assertThrows(ResourceNotFoundException.class,
-                () -> teamMemberService.removeMemberFromTeam(99L));
+                () -> teamMemberService.removeMemberFromTeam(1L, 99L));
+    }
+
+    @Test
+    void removeMemberFromTeam_ThrowsNotFound_WhenMemberBelongsToAnotherTeam() {
+        // Il membro 1 appartiene alla squadra 1: la richiesta arriva dalla squadra 2
+        when(teamMemberRepository.findByIdAndTeamId(1L, 2L)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> teamMemberService.removeMemberFromTeam(2L, 1L));
+        verify(teamMemberRepository, never()).delete(any(TeamMember.class));
     }
 }

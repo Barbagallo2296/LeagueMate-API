@@ -21,7 +21,7 @@ public class MatchController {
     private final MatchService matchService;
 
     @PutMapping("/{id}/result")
-    @PreAuthorize("hasAnyRole('ADMIN', 'ORGANIZER')")
+    @PreAuthorize("hasRole('ADMIN') or (hasRole('ORGANIZER') and @tournamentSecurity.isMatchOrganizer(#id, authentication))")
     public ResponseEntity<MatchResponse> updateMatchResult(
             @PathVariable Long id,
             @Valid @RequestBody UpdateMatchResultRequest request

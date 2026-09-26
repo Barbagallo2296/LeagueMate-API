@@ -34,7 +34,7 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-leaguemate_pass}
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       SPRING_SQL_INIT_MODE: never
-      JWT_SECRET: ${JWT_SECRET:-bXlTdXBlclNlY3JldEtleUZvckxlYWd1ZU1hdGVBUElTZWN1cml0eTIwMjY=}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET non impostato - copia .env.example in .env}
       JWT_EXPIRATION: ${JWT_EXPIRATION:-86400000}
     depends_on:
       db:

@@ -3,6 +3,7 @@ package com.leaguemate.api.security;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -33,6 +34,17 @@ public class SecurityConfig {
                 )
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                )
+                // Senza un entry point esplicito Spring risponde 403 anche alle
+                // richieste prive di token: qui si distingue 401 (non autenticato)
+                // da 403 (autenticato ma senza permessi).
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint((request, response, authException) ->
+                                SecurityErrorResponse.write(response, HttpStatus.UNAUTHORIZED,
+                                        "Authentication is required to access this resource"))
+                        .accessDeniedHandler((request, response, accessDeniedException) ->
+                                SecurityErrorResponse.write(response, HttpStatus.FORBIDDEN,
+                                        "You don't have permission to access this resource"))
                 )
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 

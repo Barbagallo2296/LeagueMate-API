@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -20,16 +21,23 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class TournamentController {
 
+    // ADMIN su qualsiasi torneo, ORGANIZER solo sui tornei di cui è organizzatore
+    private static final String OWNER_OR_ADMIN =
+            "hasRole('ADMIN') or (hasRole('ORGANIZER') and @tournamentSecurity.isOrganizer(#tournamentId, authentication))";
+
     private final TournamentService tournamentService;
 
     @PostMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'ORGANIZER')")
-    public ResponseEntity<TournamentResponse> createTournament(@Valid @RequestBody CreateTournamentRequest request) {
+    public ResponseEntity<TournamentResponse> createTournament(
+            @Valid @RequestBody CreateTournamentRequest request,
+            Authentication authentication
+    ) {
         Tournament tournament = new Tournament();
         tournament.setName(request.name());
         tournament.setSeason(request.season());
 
-        Tournament created = tournamentService.createTournament(tournament);
+        Tournament created = tournamentService.createTournament(tournament, authentication.getName());
         return new ResponseEntity<>(toResponse(created), HttpStatus.CREATED);
     }
 
@@ -54,14 +62,14 @@ public class TournamentController {
         return ResponseEntity.ok(tournaments);
     }
 
-    @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'ORGANIZER')")
+    @PutMapping("/{tournamentId}")
+    @PreAuthorize(OWNER_OR_ADMIN)
     public ResponseEntity<TournamentResponse> updateTournament(
-            @PathVariable Long id,
+            @PathVariable Long tournamentId,
             @Valid @RequestBody UpdateTournamentRequest request
     ) {
         Tournament updated = tournamentService.updateTournament(
-                id, request.name(), request.season(), request.pointsForWin(), request.pointsForDraw());
+                tournamentId, request.name(), request.season(), request.pointsForWin(), request.pointsForDraw());
         return ResponseEntity.ok(toResponse(updated));
     }
 
@@ -73,7 +81,7 @@ public class TournamentController {
     }
 
     @PostMapping("/{tournamentId}/register-team/{teamId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'ORGANIZER')")
+    @PreAuthorize(OWNER_OR_ADMIN)
     public ResponseEntity<Void> registerTeamToTournament(
             @PathVariable Long tournamentId,
             @PathVariable Long teamId
@@ -83,10 +91,16 @@ public class TournamentController {
     }
 
     @PostMapping("/{tournamentId}/generate-rounds")
-    @PreAuthorize("hasAnyRole('ADMIN', 'ORGANIZER')")
+    @PreAuthorize(OWNER_OR_ADMIN)
     public ResponseEntity<Void> generateRounds(@PathVariable Long tournamentId) {
         tournamentService.generateRounds(tournamentId);
         return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/{tournamentId}/complete")
+    @PreAuthorize(OWNER_OR_ADMIN)
+    public ResponseEntity<TournamentResponse> completeTournament(@PathVariable Long tournamentId) {
+        return ResponseEntity.ok(toResponse(tournamentService.completeTournament(tournamentId)));
     }
 
     @GetMapping("/{tournamentId}/standings")
@@ -102,7 +116,7 @@ public class TournamentController {
     // --- Co-organizzatori (@ManyToMany) ---
 
     @PostMapping("/{tournamentId}/organizers/{userId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'ORGANIZER')")
+    @PreAuthorize(OWNER_OR_ADMIN)
     public ResponseEntity<Void> addOrganizer(
             @PathVariable Long tournamentId,
             @PathVariable Long userId
@@ -112,7 +126,7 @@ public class TournamentController {
     }
 
     @DeleteMapping("/{tournamentId}/organizers/{userId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'ORGANIZER')")
+    @PreAuthorize(OWNER_OR_ADMIN)
     public ResponseEntity<Void> removeOrganizer(
             @PathVariable Long tournamentId,
             @PathVariable Long userId
@@ -141,10 +155,11 @@ public class TournamentController {
         );
     }
 
+    // L'elenco organizzatori è visibile a ogni utente autenticato: l'email non viene esposta
     private UserResponse toUserResponse(User u) {
         return new UserResponse(
                 u.getId(),
-                u.getEmail(),
+                null,
                 u.getUsername(),
                 u.getFirstName(),
                 u.getLastName(),

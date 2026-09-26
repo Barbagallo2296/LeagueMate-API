@@ -100,13 +100,56 @@ class TournamentServiceImplTest {
 
     @Test
     void createTournament_Success() {
+        when(userRepository.findByUsername("organizer1")).thenReturn(Optional.of(user));
         when(tournamentRepository.save(any(Tournament.class))).thenReturn(tournament);
 
-        Tournament created = tournamentService.createTournament(tournament);
+        Tournament created = tournamentService.createTournament(tournament, "organizer1");
 
         assertNotNull(created);
         assertEquals(TournamentStatus.DRAFT, created.getStatus());
         verify(tournamentRepository, times(1)).save(tournament);
+    }
+
+    @Test
+    void createTournament_AddsCreatorAsOrganizer() {
+        when(userRepository.findByUsername("organizer1")).thenReturn(Optional.of(user));
+        when(tournamentRepository.save(any(Tournament.class))).thenReturn(tournament);
+
+        Tournament created = tournamentService.createTournament(tournament, "organizer1");
+
+        assertTrue(created.getOrganizers().contains(user));
+    }
+
+    // --- Chiusura torneo ---
+
+    @Test
+    void completeTournament_Success_WhenAllMatchesPlayed() {
+        tournament.setStatus(TournamentStatus.ACTIVE);
+        when(tournamentRepository.findById(1L)).thenReturn(Optional.of(tournament));
+        when(matchRepository.countMatchesByTournamentAndStatus(1L, MatchStatus.SCHEDULED)).thenReturn(0L);
+        when(tournamentRepository.save(tournament)).thenReturn(tournament);
+
+        Tournament completed = tournamentService.completeTournament(1L);
+
+        assertEquals(TournamentStatus.COMPLETED, completed.getStatus());
+    }
+
+    @Test
+    void completeTournament_ThrowsConflict_WhenMatchesRemain() {
+        tournament.setStatus(TournamentStatus.ACTIVE);
+        when(tournamentRepository.findById(1L)).thenReturn(Optional.of(tournament));
+        when(matchRepository.countMatchesByTournamentAndStatus(1L, MatchStatus.SCHEDULED)).thenReturn(2L);
+
+        assertThrows(ResourceConflictException.class, () -> tournamentService.completeTournament(1L));
+        verify(tournamentRepository, never()).save(any(Tournament.class));
+    }
+
+    @Test
+    void completeTournament_ThrowsConflict_WhenNotActive() {
+        when(tournamentRepository.findById(1L)).thenReturn(Optional.of(tournament));
+
+        assertThrows(ResourceConflictException.class, () -> tournamentService.completeTournament(1L));
+        verify(tournamentRepository, never()).save(any(Tournament.class));
     }
 
     @Test

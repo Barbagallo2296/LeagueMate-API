@@ -7,7 +7,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -19,7 +18,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.time.LocalDateTime;
 
 @Component
 @RequiredArgsConstructor
@@ -70,27 +68,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             // non più presente a database.
             logger.warn("Autenticazione JWT fallita: " + ex.getMessage());
             SecurityContextHolder.clearContext();
-            writeUnauthorizedResponse(response);
+            SecurityErrorResponse.write(response, HttpStatus.UNAUTHORIZED,
+                    "Invalid or expired authentication token");
             return;
         }
 
         filterChain.doFilter(request, response);
-    }
-
-    private void writeUnauthorizedResponse(HttpServletResponse response) throws IOException {
-        response.setStatus(HttpStatus.UNAUTHORIZED.value());
-        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        response.setCharacterEncoding("UTF-8");
-
-        String body = """
-                {
-                  "timestamp": "%s",
-                  "status": 401,
-                  "error": "Unauthorized",
-                  "message": "Invalid or expired authentication token"
-                }
-                """.formatted(LocalDateTime.now());
-
-        response.getWriter().write(body);
     }
 }

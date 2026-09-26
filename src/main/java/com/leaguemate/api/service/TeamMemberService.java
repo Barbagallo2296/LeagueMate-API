@@ -8,5 +8,5 @@ import java.util.List;
 public interface TeamMemberService {
     TeamMemberResponse addMemberToTeam(Long teamId, Long userId, TeamRole teamRole);
     List<TeamMemberResponse> getMembersByTeam(Long teamId);
-    void removeMemberFromTeam(Long memberId);
+    void removeMemberFromTeam(Long teamId, Long memberId);
 }

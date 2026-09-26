@@ -62,9 +62,12 @@ public class TeamMemberServiceImpl implements TeamMemberService {
 
     @Override
     @Transactional
-    public void removeMemberFromTeam(Long memberId) {
-        TeamMember member = teamMemberRepository.findById(memberId)
-                .orElseThrow(() -> new ResourceNotFoundException("Team member not found with id: " + memberId));
+    public void removeMemberFromTeam(Long teamId, Long memberId) {
+        // Il filtro su teamId impedisce di rimuovere un membro di un'altra squadra
+        // passando un teamId qualsiasi nell'URL.
+        TeamMember member = teamMemberRepository.findByIdAndTeamId(memberId, teamId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Team member not found with id: " + memberId + " in team: " + teamId));
 
         teamMemberRepository.delete(member);
     }

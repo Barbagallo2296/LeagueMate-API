@@ -4,6 +4,7 @@ import com.leaguemate.api.dto.UpdateUserProfileRequest;
 import com.leaguemate.api.dto.UpdateUserRoleRequest;
 import com.leaguemate.api.dto.UserProfileResponse;
 import com.leaguemate.api.dto.UserResponse;
+import com.leaguemate.api.entity.Role;
 import com.leaguemate.api.entity.User;
 import com.leaguemate.api.service.UserService;
 import jakarta.validation.Valid;
@@ -37,8 +38,15 @@ public class UserController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<UserResponse> getUserById(@PathVariable Long id) {
-        return ResponseEntity.ok(toResponse(userService.findById(id)));
+    public ResponseEntity<UserResponse> getUserById(
+            @PathVariable Long id,
+            @AuthenticationPrincipal User currentUser
+    ) {
+        User user = userService.findById(id);
+
+        // L'email è un dato personale: visibile solo al diretto interessato o a un ADMIN
+        boolean canSeeEmail = currentUser.getRole() == Role.ADMIN || currentUser.getId().equals(id);
+        return ResponseEntity.ok(canSeeEmail ? toResponse(user) : toPublicResponse(user));
     }
 
     @PutMapping("/{id}/role")
@@ -64,6 +72,10 @@ public class UserController {
     ) {
         UserProfileResponse updated = userService.updateProfile(id, request, currentUser.getUsername());
         return ResponseEntity.ok(updated);
+    }
+
+    private UserResponse toPublicResponse(User u) {
+        return new UserResponse(u.getId(), null, u.getUsername(), u.getFirstName(), u.getLastName(), u.getRole().name());
     }
 
     private UserResponse toResponse(User u) {
