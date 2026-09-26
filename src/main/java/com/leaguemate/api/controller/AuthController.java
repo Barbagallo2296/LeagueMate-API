@@ -5,6 +5,7 @@ import com.leaguemate.api.dto.LoginRequest;
 import com.leaguemate.api.dto.RegisterRequest;
 import com.leaguemate.api.dto.UserResponse;
 import com.leaguemate.api.entity.User;
+import com.leaguemate.api.mapper.UserMapper;
 import com.leaguemate.api.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -24,26 +25,9 @@ public class AuthController {
 
     @PostMapping("/register")
     public ResponseEntity<UserResponse> register(@Valid @RequestBody RegisterRequest request) {
-        User user = new User();
-        user.setEmail(request.email());
-        user.setUsername(request.username());
-        user.setPassword(request.password());
-        user.setFirstName(request.firstName());
-        user.setLastName(request.lastName());
-        user.setRole(com.leaguemate.api.entity.Role.USER);
+        User registered = authService.register(UserMapper.fromRegisterRequest(request));
 
-        User registered = authService.register(user);
-
-        UserResponse response = new UserResponse(
-                registered.getId(),
-                registered.getEmail(),
-                registered.getUsername(),
-                registered.getFirstName(),
-                registered.getLastName(),
-                registered.getRole().name()
-        );
-
-        return new ResponseEntity<>(response, HttpStatus.CREATED);
+        return new ResponseEntity<>(UserMapper.toResponse(registered), HttpStatus.CREATED);
     }
 
     @PostMapping("/login")

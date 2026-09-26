@@ -12,6 +12,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -84,11 +88,12 @@ class TeamServiceImplTest {
         t2.setId(2L);
         t2.setName("Heart Pirates");
 
-        when(teamRepository.findAll()).thenReturn(List.of(team, t2));
+        Pageable pageable = PageRequest.of(0, 20);
+        when(teamRepository.findAll(pageable)).thenReturn(new PageImpl<>(List.of(team, t2), pageable, 2));
 
-        List<Team> teams = teamService.getAllTeams();
+        Page<Team> teams = teamService.getAllTeams(pageable);
 
-        assertEquals(2, teams.size());
+        assertEquals(2, teams.getContent().size());
     }
 
     @Test

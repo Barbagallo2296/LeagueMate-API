@@ -42,13 +42,16 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(body, HttpStatus.BAD_REQUEST);
     }
 
-    // JSON malformato o con tipi incompatibili nel body
+    @ExceptionHandler(BadRequestException.class)
+    public ResponseEntity<Object> handleBadRequest(BadRequestException ex) {
+        return build(HttpStatus.BAD_REQUEST, "Bad Request", ex.getMessage());
+    }
+
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<Object> handleUnreadableBody(HttpMessageNotReadableException ex) {
         return build(HttpStatus.BAD_REQUEST, "Bad Request", "Malformed or unreadable request body");
     }
 
-    // Path variable non convertibile, es. /api/tournaments/abc o /status/PIPPO
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<Object> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
         return build(HttpStatus.BAD_REQUEST, "Bad Request",
@@ -70,8 +73,7 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "Unsupported Media Type", ex.getMessage());
     }
 
-    // Violazione di un vincolo del database (es. unique) sfuggita ai controlli
-    // applicativi, tipicamente per due richieste concorrenti
+
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<Object> handleDataIntegrity(DataIntegrityViolationException ex) {
         log.warn("Violazione di integrità dei dati: {}", ex.getMostSpecificCause().getMessage());
@@ -90,7 +92,6 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Object> handleGeneralException(Exception ex) {
-        // Il client riceve un messaggio generico, ma lo stack trace deve restare nei log
         log.error("Errore non gestito", ex);
         return build(HttpStatus.INTERNAL_SERVER_ERROR, "Internal Server Error", "An unexpected error occurred");
     }

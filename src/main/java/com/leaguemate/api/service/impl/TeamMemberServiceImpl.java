@@ -7,6 +7,7 @@ import com.leaguemate.api.entity.TeamRole;
 import com.leaguemate.api.entity.User;
 import com.leaguemate.api.exception.ResourceConflictException;
 import com.leaguemate.api.exception.ResourceNotFoundException;
+import com.leaguemate.api.mapper.TeamMapper;
 import com.leaguemate.api.repository.TeamMemberRepository;
 import com.leaguemate.api.repository.TeamRepository;
 import com.leaguemate.api.repository.UserRepository;
@@ -15,7 +16,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -43,9 +43,8 @@ public class TeamMemberServiceImpl implements TeamMemberService {
         member.setTeam(team);
         member.setUser(user);
         member.setTeamRole(teamRole);
-        member.setJoinedAt(LocalDateTime.now());
 
-        return toResponse(teamMemberRepository.save(member));
+        return TeamMapper.toMemberResponse(teamMemberRepository.save(member));
     }
 
     @Override
@@ -56,7 +55,7 @@ public class TeamMemberServiceImpl implements TeamMemberService {
         }
 
         return teamMemberRepository.findByTeamIdWithUserAndTeam(teamId).stream()
-                .map(this::toResponse)
+                .map(TeamMapper::toMemberResponse)
                 .toList();
     }
 
@@ -70,19 +69,5 @@ public class TeamMemberServiceImpl implements TeamMemberService {
                         "Team member not found with id: " + memberId + " in team: " + teamId));
 
         teamMemberRepository.delete(member);
-    }
-
-    private TeamMemberResponse toResponse(TeamMember member) {
-        return new TeamMemberResponse(
-                member.getId(),
-                member.getUser().getId(),
-                member.getUser().getUsername(),
-                member.getUser().getFirstName(),
-                member.getUser().getLastName(),
-                member.getTeam().getId(),
-                member.getTeam().getName(),
-                member.getTeamRole().name(),
-                member.getJoinedAt()
-        );
     }
 }

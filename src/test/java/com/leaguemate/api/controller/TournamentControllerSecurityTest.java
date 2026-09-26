@@ -12,12 +12,12 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-
-import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -77,7 +77,7 @@ class TournamentControllerSecurityTest {
     @Test
     @WithMockUser(roles = "USER")
     void getAllTournaments_ReturnsOk_ForAnyAuthenticatedUser() throws Exception {
-        when(tournamentService.getAllTournaments()).thenReturn(List.of());
+        when(tournamentService.getAllTournaments(any(Pageable.class))).thenReturn(Page.empty());
 
         mockMvc.perform(get("/api/tournaments"))
                 .andExpect(status().isOk());

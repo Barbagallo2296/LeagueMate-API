@@ -7,6 +7,8 @@ import com.leaguemate.api.entity.Tournament;
 import com.leaguemate.api.entity.TournamentRegistration;
 import com.leaguemate.api.entity.TournamentStatus;
 import com.leaguemate.api.entity.User;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 
@@ -14,8 +16,8 @@ public interface TournamentService {
 
     Tournament createTournament(Tournament tournament, String creatorUsername);
     Tournament getTournamentById(Long id);
-    List<Tournament> getAllTournaments();
-    List<Tournament> getTournamentsByStatus(TournamentStatus status);
+    Page<Tournament> getAllTournaments(Pageable pageable);
+    Page<Tournament> getTournamentsByStatus(TournamentStatus status, Pageable pageable);
     Tournament updateTournament(Long id, String name, String season, int pointsForWin, int pointsForDraw);
     void deleteTournament(Long id);
 

@@ -1,6 +1,7 @@
 package com.leaguemate.api.entity;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.CreationTimestamp;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
@@ -9,7 +10,8 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "tournament_registrations")
+@Table(name = "tournament_registrations",
+        uniqueConstraints = @UniqueConstraint(name = "uk_registration_team_tournament", columnNames = {"team_id", "tournament_id"}))
 @Getter
 @Setter
 @NoArgsConstructor
@@ -28,10 +30,11 @@ public class TournamentRegistration {
     @JoinColumn(name = "team_id", nullable = false)
     private Team team;
 
-    @Column(name = "registered_at", nullable = false)
-    private LocalDateTime registeredAt = LocalDateTime.now();
+    @CreationTimestamp
+    @Column(name = "registered_at", nullable = false, updatable = false)
+    private LocalDateTime registeredAt;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, length = 20)
     private RegistrationStatus status;
 }

@@ -15,6 +15,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
 
 import java.util.List;
@@ -125,12 +129,13 @@ class UserServiceImplTest {
         other.setId(2L);
         other.setUsername("doc_friend");
 
-        when(userRepository.findAll()).thenReturn(List.of(user, other));
+        Pageable pageable = PageRequest.of(0, 20);
+        when(userRepository.findAll(pageable)).thenReturn(new PageImpl<>(List.of(user, other), pageable, 2));
 
-        List<User> result = userService.findAll();
+        Page<User> result = userService.findAll(pageable);
 
-        assertEquals(2, result.size());
-        verify(userRepository, times(1)).findAll();
+        assertEquals(2, result.getContent().size());
+        verify(userRepository, times(1)).findAll(pageable);
     }
 
     @Test

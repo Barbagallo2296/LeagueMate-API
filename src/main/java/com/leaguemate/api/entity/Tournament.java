@@ -2,6 +2,7 @@ package com.leaguemate.api.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
+import org.hibernate.annotations.CreationTimestamp;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -25,14 +26,14 @@ public class Tournament {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
+    @Column(nullable = false, length = 100)
     private String name;
 
-    @Column(nullable = false)
+    @Column(nullable = false, length = 20)
     private String season;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, length = 20)
     private TournamentStatus status;
 
     @Column(name = "points_for_win", nullable = false)
@@ -41,8 +42,12 @@ public class Tournament {
     @Column(name = "points_for_draw", nullable = false)
     private int pointsForDraw = 1;
 
-    @Column(name = "created_at", nullable = false)
-    private LocalDateTime createdAt = LocalDateTime.now();
+    @Column(name = "double_round_robin", nullable = false)
+    private boolean doubleRoundRobin = false;
+
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt;
 
     @JsonIgnore
     @OneToMany(mappedBy = "tournament", cascade = CascadeType.ALL, orphanRemoval = true)

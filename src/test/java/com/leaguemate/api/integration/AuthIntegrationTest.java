@@ -214,7 +214,7 @@ class AuthIntegrationTest {
         mockMvc.perform(get("/api/users")
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isArray());
+                .andExpect(jsonPath("$.content").isArray());
     }
 
     @Test

@@ -19,11 +19,13 @@ public class UserProfile {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(length = 500)
     private String bio;
 
     @Column(name = "avatar_url")
     private String avatarUrl;
 
+    @Column(length = 20)
     private String phoneNumber;
 
     @JsonIgnore

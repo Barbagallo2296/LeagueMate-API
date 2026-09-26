@@ -268,6 +268,55 @@ class AuthorizationRulesIntegrationTest {
                 .andExpect(jsonPath("$.email").value("owner@leaguemate.com"));
     }
 
+    // --- Paginazione ---
+
+    @Test
+    @DisplayName("Le liste sono paginate e ordinabili solo sui campi ammessi")
+    void lists_ArePaginated_AndSortIsWhitelisted() throws Exception {
+        createTeam("Straw Hat FC");
+        createTeam("Heart Pirates");
+        createTeam("Red Hair United");
+
+        mockMvc.perform(get("/api/teams?page=0&size=2&sort=name,asc")
+                        .header("Authorization", "Bearer " + userToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(2))
+                .andExpect(jsonPath("$.content[0].name").value("Heart Pirates"))
+                .andExpect(jsonPath("$.page.totalElements").value(3))
+                .andExpect(jsonPath("$.page.totalPages").value(2));
+
+        mockMvc.perform(get("/api/tournaments?sort=organizers.password")
+                        .header("Authorization", "Bearer " + userToken))
+                .andExpect(status().isBadRequest());
+    }
+
+    // --- Andata e ritorno ---
+
+    @Test
+    @DisplayName("Un torneo andata e ritorno genera il doppio delle partite")
+    void doubleRoundRobinTournament_GeneratesReturnLeg() throws Exception {
+        String body = mockMvc.perform(post("/api/tournaments")
+                        .header("Authorization", "Bearer " + ownerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new CreateTournamentRequest("Andata e Ritorno", "2026/2027", true))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.doubleRoundRobin").value(true))
+                .andReturn().getResponse().getContentAsString();
+        Long tournamentId = objectMapper.readTree(body).get("id").asLong();
+
+        for (String team : new String[]{"Straw Hat FC", "Heart Pirates", "Red Hair United"}) {
+            mockMvc.perform(post("/api/tournaments/" + tournamentId + "/register-team/" + createTeam(team))
+                            .header("Authorization", "Bearer " + ownerToken))
+                    .andExpect(status().isCreated());
+        }
+
+        generateRounds(tournamentId, ownerToken);
+
+        // 3 squadre: 3 partite di andata + 3 di ritorno
+        assertEquals(6, matchRepository.count());
+    }
+
     // --- Codici di errore ---
 
     @Test

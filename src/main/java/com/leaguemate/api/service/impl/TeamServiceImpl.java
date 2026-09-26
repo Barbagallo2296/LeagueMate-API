@@ -6,11 +6,11 @@ import com.leaguemate.api.exception.ResourceNotFoundException;
 import com.leaguemate.api.repository.TeamRepository;
 import com.leaguemate.api.service.TeamService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
-import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -25,7 +25,6 @@ public class TeamServiceImpl implements TeamService {
         if (teamRepository.findByName(team.getName()).isPresent()) {
             throw new ResourceConflictException("Team name '" + team.getName() + "' is already taken");
         }
-        team.setCreatedAt(LocalDateTime.now());
         return teamRepository.save(team);
     }
 
@@ -38,8 +37,8 @@ public class TeamServiceImpl implements TeamService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<Team> getAllTeams() {
-        return teamRepository.findAll();
+    public Page<Team> getAllTeams(Pageable pageable) {
+        return teamRepository.findAll(pageable);
     }
 
     @Override

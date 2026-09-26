@@ -17,6 +17,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -175,23 +179,27 @@ class TournamentServiceImplTest {
         t2.setId(2L);
         t2.setName("Europa League");
 
-        when(tournamentRepository.findAll()).thenReturn(List.of(tournament, t2));
+        Pageable pageable = PageRequest.of(0, 20);
+        when(tournamentRepository.findAll(pageable)).thenReturn(new PageImpl<>(List.of(tournament, t2), pageable, 2));
 
-        List<Tournament> result = tournamentService.getAllTournaments();
+        Page<Tournament> result = tournamentService.getAllTournaments(pageable);
 
-        assertEquals(2, result.size());
-        verify(tournamentRepository, times(1)).findAll();
+        assertEquals(2, result.getContent().size());
+        assertEquals(2, result.getTotalElements());
+        verify(tournamentRepository, times(1)).findAll(pageable);
     }
 
     @Test
     void getTournamentsByStatus_ReturnsFilteredList() {
         tournament.setStatus(TournamentStatus.ACTIVE);
-        when(tournamentRepository.findByStatus(TournamentStatus.ACTIVE)).thenReturn(List.of(tournament));
+        Pageable pageable = PageRequest.of(0, 20);
+        when(tournamentRepository.findByStatus(TournamentStatus.ACTIVE, pageable))
+                .thenReturn(new PageImpl<>(List.of(tournament), pageable, 1));
 
-        List<Tournament> result = tournamentService.getTournamentsByStatus(TournamentStatus.ACTIVE);
+        Page<Tournament> result = tournamentService.getTournamentsByStatus(TournamentStatus.ACTIVE, pageable);
 
         assertFalse(result.isEmpty());
-        assertEquals(TournamentStatus.ACTIVE, result.get(0).getStatus());
+        assertEquals(TournamentStatus.ACTIVE, result.getContent().get(0).getStatus());
     }
 
     @Test
@@ -290,6 +298,45 @@ class TournamentServiceImplTest {
         assertEquals(3, rounds.size());
         assertEquals(2, rounds.get(0).getMatches().size());
         assertEquals(TournamentStatus.ACTIVE, tournament.getStatus());
+    }
+
+    @Test
+    void generateRounds_DoubleRoundRobin_MirrorsFirstLegWithSwappedHomeAway() {
+        Team teamC = new Team();
+        teamC.setId(3L);
+        teamC.setName("Team C");
+        Team teamD = new Team();
+        teamD.setId(4L);
+        teamD.setName("Team D");
+        tournament.setDoubleRoundRobin(true);
+
+        when(tournamentRepository.findById(1L)).thenReturn(Optional.of(tournament));
+        when(registrationRepository.findConfirmedWithTeams(1L, RegistrationStatus.CONFIRMED))
+                .thenReturn(List.of(createReg(teamA), createReg(teamB), createReg(teamC), createReg(teamD)));
+        when(tournamentRepository.save(any(Tournament.class))).thenReturn(tournament);
+
+        List<Round> rounds = tournamentService.generateRounds(1L);
+
+        // 4 squadre: 3 giornate di andata + 3 di ritorno, 12 partite
+        assertEquals(6, rounds.size());
+        assertEquals(12, rounds.stream().mapToInt(r -> r.getMatches().size()).sum());
+
+        // La giornata 4 è la giornata 1 a campi invertiti
+        Round first = rounds.get(0);
+        Round mirror = rounds.get(3);
+        assertEquals(4, mirror.getRoundNumber());
+        for (int i = 0; i < first.getMatches().size(); i++) {
+            assertEquals(first.getMatches().get(i).getHomeTeam(), mirror.getMatches().get(i).getAwayTeam());
+            assertEquals(first.getMatches().get(i).getAwayTeam(), mirror.getMatches().get(i).getHomeTeam());
+        }
+
+        // Ogni coppia ordinata (casa, trasferta) compare esattamente una volta
+        long distinctOrderedPairs = rounds.stream()
+                .flatMap(r -> r.getMatches().stream())
+                .map(m -> m.getHomeTeam().getId() + "-" + m.getAwayTeam().getId())
+                .distinct()
+                .count();
+        assertEquals(12, distinctOrderedPairs);
     }
 
     @Test

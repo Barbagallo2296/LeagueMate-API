@@ -8,10 +8,11 @@ import com.leaguemate.api.exception.ResourceNotFoundException;
 import com.leaguemate.api.repository.*;
 import com.leaguemate.api.service.TournamentService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -74,7 +75,6 @@ public class TournamentServiceImpl implements TournamentService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with username: " + creatorUsername));
 
         tournament.setStatus(TournamentStatus.DRAFT);
-        tournament.setCreatedAt(LocalDateTime.now());
         // Chi crea il torneo ne è il primo organizzatore: senza questo passaggio
         // un ORGANIZER non potrebbe gestire il torneo appena creato.
         tournament.getOrganizers().add(creator);
@@ -90,14 +90,14 @@ public class TournamentServiceImpl implements TournamentService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<Tournament> getAllTournaments() {
-        return tournamentRepository.findAll();
+    public Page<Tournament> getAllTournaments(Pageable pageable) {
+        return tournamentRepository.findAll(pageable);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<Tournament> getTournamentsByStatus(TournamentStatus status) {
-        return tournamentRepository.findByStatus(status);
+    public Page<Tournament> getTournamentsByStatus(TournamentStatus status, Pageable pageable) {
+        return tournamentRepository.findByStatus(status, pageable);
     }
 
     @Override
@@ -156,7 +156,6 @@ public class TournamentServiceImpl implements TournamentService {
         TournamentRegistration registration = new TournamentRegistration();
         registration.setTournament(tournament);
         registration.setTeam(team);
-        registration.setRegisteredAt(LocalDateTime.now());
         registration.setStatus(RegistrationStatus.CONFIRMED);
 
         return registrationRepository.save(registration);
@@ -228,12 +227,40 @@ public class TournamentServiceImpl implements TournamentService {
             generatedRounds.add(round);
         }
 
+        if (tournament.isDoubleRoundRobin()) {
+            generatedRounds.addAll(buildReturnLeg(generatedRounds, tournament));
+        }
+
         tournament.getRounds().clear();
         tournament.getRounds().addAll(generatedRounds);
         tournament.setStatus(TournamentStatus.ACTIVE);
 
         tournamentRepository.save(tournament);
         return tournament.getRounds();
+    }
+
+    // Girone di ritorno: stesse giornate dell'andata, nello stesso ordine,
+    // con casa e trasferta invertite (giornata N+k speculare alla giornata k).
+    private List<Round> buildReturnLeg(List<Round> firstLeg, Tournament tournament) {
+        List<Round> returnLeg = new ArrayList<>();
+
+        for (Round firstLegRound : firstLeg) {
+            Round round = new Round();
+            round.setRoundNumber(firstLegRound.getRoundNumber() + firstLeg.size());
+            round.setTournament(tournament);
+            round.setMatches(new ArrayList<>());
+
+            for (Match firstLegMatch : firstLegRound.getMatches()) {
+                Match match = new Match();
+                match.setHomeTeam(firstLegMatch.getAwayTeam());
+                match.setAwayTeam(firstLegMatch.getHomeTeam());
+                match.setStatus(MatchStatus.SCHEDULED);
+                match.setRound(round);
+                round.getMatches().add(match);
+            }
+            returnLeg.add(round);
+        }
+        return returnLeg;
     }
 
     @Override

@@ -1,13 +1,13 @@
 package com.leaguemate.api.service;
 
 import com.leaguemate.api.entity.Team;
-
-import java.util.List;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 public interface TeamService {
     Team createTeam(Team team);
     Team getTeamById(Long id);
-    List<Team> getAllTeams();
+    Page<Team> getAllTeams(Pageable pageable);
     Team updateTeam(Long id, String name, String logoUrl);
     void deleteTeam(Long id);
 }

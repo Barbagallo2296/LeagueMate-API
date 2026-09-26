@@ -14,6 +14,7 @@ Backend REST per la gestione di tornei amatoriali di calcio a girone all'italian
 | MySQL | 8.x |
 | H2 (solo test) | in memoria |
 | JWT (jjwt) | 0.12.6 |
+| Flyway | 12.x |
 | Lombok | 1.18.x |
 | JaCoCo | 0.8.12 |
 | Maven | 3.x |
@@ -37,9 +38,16 @@ src/main/java/com/leaguemate/api/
 ├── repository/ # Interfacce Spring Data JPA
 ├── entity/ # Entity JPA su MySQL
 ├── dto/ # Java Records (input/output)
-├── security/ # JWT Filter e SecurityConfig
+├── mapper/ # Conversione Entity → DTO, in un unico punto
+├── security/ # JWT Filter, SecurityConfig, ownership dei tornei
 └── exception/ # Handler eccezioni
+
+src/main/resources/db/
+├── migration/ # Schema versionato Flyway (V1, V2, V3...)
+└── demo/ # Dati di esempio (migrazione ripetibile, solo su richiesta)
 ```
+
+I mapper sono classi statiche senza stato. I service restituiscono un DTO quando la conversione legge associazioni LAZY (es. `TeamMemberService`, `UserService.getProfile`), perché con `open-in-view=false` deve avvenire dentro la transazione; negli altri casi restituiscono l'entity e la conversione avviene nel controller.
 
 
 ### Moduli funzionali
@@ -82,6 +90,14 @@ src/main/java/com/leaguemate/api/
 | **Query derivate dal nome** | `existsByTeamIdAndUserId()`, `existsByUsername()`, `countByRole()` | Controlli senza caricare intere tabelle |
 | **`@EntityGraph`** | `findWithRegistrationsById()` | Fetch dichiarativo, usato nell'iscrizione delle squadre |
 
+### Schema del database (Flyway)
+
+Lo schema è gestito **solo da Flyway**: ogni modifica è una migrazione versionata in `db/migration` (`V1__init_schema.sql`, `V2__limit_profile_bio_length.sql`, `V3__add_double_round_robin.sql`). Hibernate gira con `ddl-auto=validate`: non modifica mai il database e all'avvio verifica che le entity corrispondano alle tabelle.
+
+- I **test di integrazione** applicano le stesse migrazioni su H2, quindi girano sullo schema reale.
+- I **dati demo** (`db/demo/R__demo_data.sql`) si caricano solo aggiungendo `classpath:db/demo` a `FLYWAY_LOCATIONS`, come fa il `docker-compose.yml`.
+- Un database creato prima di Flyway viene registrato come versione 1 (`baseline-on-migrate`) e riceve solo le migrazioni successive.
+
 ### Configurazione JPA
 
 `spring.jpa.open-in-view=false` — disattivato di proposito. La sessione Hibernate non resta aperta durante la serializzazione della risposta: ogni endpoint carica esplicitamente le associazioni necessarie tramite `JOIN FETCH` o `@EntityGraph`, evitando accessi lazy nascosti fuori dalla transazione.
@@ -92,7 +108,7 @@ src/main/java/com/leaguemate/api/
 - **UserProfile** — dati aggiuntivi (bio, avatar, telefono), relazione `@OneToOne`
 - **Team** — squadra con membri e iscrizioni
 - **TeamMember** — giunzione ricca User↔Team con `TeamRole` (CAPTAIN/PLAYER/RESERVE) e `joinedAt`
-- **Tournament** — torneo con stagione, stato, configurazione punti e **co-organizzatori**
+- **Tournament** — torneo con stagione, stato, configurazione punti, formula (sola andata o andata e ritorno) e **co-organizzatori**
 - **TournamentRegistration** — giunzione ricca Tournament↔Team con `RegistrationStatus` e `registeredAt`
 - **Round** — giornata del torneo
 - **Match** — partita con squadra casa/trasferta, score e stato
@@ -102,7 +118,7 @@ src/main/java/com/leaguemate/api/
 ## Funzionalità principali
 
 ### Generazione calendario (round-robin, metodo del cerchio)
-`generateRounds()` genera il calendario all'italiana con il **metodo del cerchio** (circle method), che produce lo stesso calendario delle tabelle di Berger: una squadra resta fissa e le altre ruotano attorno a essa. Con N squadre genera N-1 giornate da N/2 partite, e ogni coppia si incontra esattamente una volta. Gestisce il numero dispari con un turno di riposo e alterna casa/trasferta fra le giornate. La generazione è consentita **solo in stato `DRAFT`**, per non cancellare risultati già registrati.
+`generateRounds()` genera il calendario all'italiana con il **metodo del cerchio** (circle method), che produce lo stesso calendario delle tabelle di Berger: una squadra resta fissa e le altre ruotano attorno a essa. Con N squadre genera N-1 giornate da N/2 partite, e ogni coppia si incontra esattamente una volta. Gestisce il numero dispari con un turno di riposo e alterna casa/trasferta fra le giornate. Se il torneo è creato con `"doubleRoundRobin": true`, dopo l'andata genera il **girone di ritorno**: stesse giornate nello stesso ordine, con casa e trasferta invertite (N squadre → 2(N-1) giornate). La generazione è consentita **solo in stato `DRAFT`**, per non cancellare risultati già registrati.
 
 ### Calcolo classifica dinamico (Stream API + JOIN FETCH)
 `calculateStandings()` calcola la classifica in tempo reale dalle partite `COMPLETED`, senza persisterla: non può mai andare fuori sincrono con i risultati. Usa un accumulatore tipizzato `TeamStats` (niente indici magici) e ordina per punti, differenza reti, gol fatti e nome.
@@ -168,6 +184,8 @@ Gli errori che nascono nella filter chain di Spring Security (token non valido, 
 ---
 
 ## Endpoint REST — 32 totali
+
+Le liste di tornei, squadre e utenti sono **paginate**: `?page=0&size=20&sort=name,asc` (default 20 elementi, massimo 100). La risposta ha la forma `{ "content": [...], "page": { "size", "number", "totalElements", "totalPages" } }`. Il parametro `sort` accetta solo i campi ammessi da ciascun endpoint; un campo diverso restituisce `400`.
 
 ### Auth (2)
 | Metodo | Endpoint | Accesso |
@@ -238,7 +256,7 @@ cp .env.example .env              # poi impostare JWT_SECRET (openssl rand -base
 docker compose up --build
 ```
 
-Un solo comando avvia MySQL 8 e l'applicazione. Al primo avvio MySQL esegue automaticamente `schema.sql` e `data.sql`, creando la struttura e popolando i dati essenziali. Il Dockerfile usa un multi-stage build (Maven → JRE), MySQL ha un healthcheck e l'app attende che sia pronto.
+Un solo comando avvia MySQL 8 e l'applicazione. All'avvio Flyway applica le migrazioni dello schema e carica i dati demo. Il Dockerfile usa un multi-stage build (Maven → JRE), MySQL ha un healthcheck e l'app attende che sia pronto.
 
 ### Utenti precaricati
 
@@ -272,6 +290,7 @@ jwt.expiration=${JWT_EXPIRATION:86400000}
 
 ```bash
 export JWT_SECRET=$(openssl rand -base64 32)
+export FLYWAY_LOCATIONS=classpath:db/migration,classpath:db/demo   # facoltativo: dati demo
 ./mvnw spring-boot:run
 ```
 
@@ -279,14 +298,14 @@ export JWT_SECRET=$(openssl rand -base64 32)
 
 ## Testing
 
-**129 test** con JUnit 5, Mockito, Spring Security Test e MockMvc — tutti verdi.
-**Code coverage: 91%** (requisito minimo 35%).
+**132 test** con JUnit 5, Mockito, Spring Security Test e MockMvc — tutti verdi.
+**Code coverage: 92%** (requisito minimo 35%).
 
 ### Test unitari (service, security, exception)
 
 | Classe testata | Test | Descrizione |
 |---|---|---|
-| `TournamentServiceImpl` | 33 | CRUD, **generazione calendario**, **classifica**, **statistiche**, co-organizzatori, chiusura torneo |
+| `TournamentServiceImpl` | 34 | CRUD, **generazione calendario** (anche andata e ritorno), **classifica**, **statistiche**, co-organizzatori, chiusura torneo |
 | `UserServiceImpl` | 18 | Registrazione, ruoli, **profilo con autorizzazione a livello di risorsa** |
 | `TeamServiceImpl` | 9 | CRUD completo, unicità nome, vincoli di cancellazione |
 | `TeamMemberServiceImpl` | 10 | Aggiunta membri, duplicati, rimozione vincolata alla squadra |
@@ -303,20 +322,21 @@ export JWT_SECRET=$(openssl rand -base64 32)
 |---|---|---|
 | `AuthIntegrationTest` | 10 | Flusso register→login→endpoint protetto, RBAC, 401 identici, password mai esposta |
 | `TournamentFlowIntegrationTest` | 10 | Ciclo di vita completo del torneo end-to-end |
-| `AuthorizationRulesIntegrationTest` | 9 | Ownership dei tornei, chiusura torneo, membri, privacy email, 401/400 |
+| `AuthorizationRulesIntegrationTest` | 11 | Ownership dei tornei, chiusura torneo, andata e ritorno, paginazione, membri, privacy email, 401/400 |
 | `ApiApplicationTests` | 1 | Caricamento del contesto Spring |
 
-I test di integrazione girano su un database H2 in memoria (profilo `test`), quindi l'intera suite si esegue senza un MySQL attivo.
+I test di integrazione girano su un database H2 in memoria (profilo `test`) su cui Flyway applica le stesse migrazioni della produzione, quindi l'intera suite si esegue senza un MySQL attivo.
 
 ### Coverage per package
 
 | Package | Coverage |
 |---|---|
 | `security` | 96% |
-| `exception` | 81% |
+| `exception` | 82% |
 | `service.impl` | 97% |
-| `controller` | 75% |
-| **Totale** | **91%** |
+| `mapper` | 99% |
+| `controller` | 73% |
+| **Totale** | **92%** |
 
 > `dto` ed `entity` sono esclusi dal report (boilerplate Lombok). I controller sono **inclusi** e coperti dai test di integrazione.
 
@@ -332,7 +352,7 @@ Report JaCoCo in `target/site/jacoco/index.html`.
 | Elemento | Stato |
 |---|---|
 | Codice sorgente completo | ✅ |
-| Script SQL (`schema.sql` + `data.sql`) | ✅ |
+| Script SQL (migrazioni Flyway in `db/migration` + dati demo in `db/demo`) | ✅ |
 | Collection Postman (39 richieste, 8 cartelle) | ✅ |
 | Script Docker (`Dockerfile` + `docker-compose.yml`) | ✅ |
 | Relazione tecnica | ✅ |

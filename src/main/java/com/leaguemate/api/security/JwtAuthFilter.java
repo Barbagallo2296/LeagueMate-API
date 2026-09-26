@@ -35,8 +35,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         final String authHeader = request.getHeader("Authorization");
 
-        // Nessun token: la richiesta prosegue come anonima.
-        // Sarà poi la SecurityFilterChain a decidere se l'endpoint è pubblico.
+        
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
@@ -64,8 +63,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             }
 
         } catch (JwtException | IllegalArgumentException | UsernameNotFoundException ex) {
-            // Token scaduto, firma non valida, formato corrotto, oppure utente
-            // non più presente a database.
+        
             logger.warn("Autenticazione JWT fallita: " + ex.getMessage());
             SecurityContextHolder.clearContext();
             SecurityErrorResponse.write(response, HttpStatus.UNAUTHORIZED,

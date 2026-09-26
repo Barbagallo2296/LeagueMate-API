@@ -4,8 +4,8 @@ import com.leaguemate.api.dto.UpdateUserProfileRequest;
 import com.leaguemate.api.dto.UserProfileResponse;
 import com.leaguemate.api.entity.Role;
 import com.leaguemate.api.entity.User;
-
-import java.util.List;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 public interface UserService {
 
@@ -15,7 +15,7 @@ public interface UserService {
 
     User findById(Long id);
 
-    List<User> findAll();
+    Page<User> findAll(Pageable pageable);
 
     User updateRole(Long id, Role role);
 

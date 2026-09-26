@@ -7,14 +7,16 @@ import com.leaguemate.api.entity.User;
 import com.leaguemate.api.entity.UserProfile;
 import com.leaguemate.api.exception.ResourceConflictException;
 import com.leaguemate.api.exception.ResourceNotFoundException;
+import com.leaguemate.api.mapper.UserMapper;
 import com.leaguemate.api.repository.UserRepository;
 import com.leaguemate.api.service.UserService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -55,8 +57,8 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<User> findAll() {
-        return userRepository.findAll();
+    public Page<User> findAll(Pageable pageable) {
+        return userRepository.findAll(pageable);
     }
 
     @Override
@@ -80,7 +82,7 @@ public class UserServiceImpl implements UserService {
     @Transactional(readOnly = true)
     public UserProfileResponse getProfile(Long userId) {
         User user = findById(userId);
-        return toProfileResponse(user);
+        return UserMapper.toProfileResponse(user);
     }
 
     @Override
@@ -110,23 +112,6 @@ public class UserServiceImpl implements UserService {
         profile.setPhoneNumber(request.phoneNumber());
 
         userRepository.save(target);
-        return toProfileResponse(target);
-    }
-
-    private UserProfileResponse toProfileResponse(User user) {
-        UserProfile profile = user.getProfile();
-
-        if (profile == null) {
-            return new UserProfileResponse(null, user.getId(), user.getUsername(), null, null, null);
-        }
-
-        return new UserProfileResponse(
-                profile.getId(),
-                user.getId(),
-                user.getUsername(),
-                profile.getBio(),
-                profile.getAvatarUrl(),
-                profile.getPhoneNumber()
-        );
+        return UserMapper.toProfileResponse(target);
     }
 }

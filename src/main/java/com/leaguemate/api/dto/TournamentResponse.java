@@ -9,5 +9,6 @@ public record TournamentResponse(
         String status,
         int pointsForWin,
         int pointsForDraw,
+        boolean doubleRoundRobin,
         LocalDateTime createdAt
 ) {}

@@ -7,5 +7,12 @@ public record CreateTournamentRequest(
         String name,
 
         @NotBlank(message = "Season is required")
-        String season
-) {}
+        String season,
+
+        // Facoltativo: se assente il torneo è di sola andata
+        Boolean doubleRoundRobin
+) {
+    public CreateTournamentRequest(String name, String season) {
+        this(name, season, null);
+    }
+}
