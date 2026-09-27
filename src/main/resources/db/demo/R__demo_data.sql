@@ -38,6 +38,11 @@ VALUES (1, 1, 1, 'CAPTAIN'),
        (4, 2, 2, 'CAPTAIN')
     ON DUPLICATE KEY UPDATE id = id;
 
+UPDATE teams SET owner_id = 1 WHERE id = 1 AND owner_id IS NULL;
+UPDATE teams SET owner_id = 2 WHERE id = 2 AND owner_id IS NULL;
+UPDATE teams SET owner_id = 3 WHERE id = 3 AND owner_id IS NULL;
+UPDATE teams SET owner_id = 2 WHERE id = 4 AND owner_id IS NULL;
+
 INSERT INTO tournaments (id, name, season, status, points_for_win, points_for_draw)
 VALUES (1, 'Grand Line Cup', '2026/2027', 'DRAFT', 3, 1)
     ON DUPLICATE KEY UPDATE id = id;

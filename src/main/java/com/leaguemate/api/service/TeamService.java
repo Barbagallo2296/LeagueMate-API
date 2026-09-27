@@ -5,7 +5,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 public interface TeamService {
-    Team createTeam(Team team);
+    Team createTeam(Team team, String ownerUsername);
     Team getTeamById(Long id);
     Page<Team> getAllTeams(Pageable pageable);
     Team updateTeam(Long id, String name, String logoUrl);

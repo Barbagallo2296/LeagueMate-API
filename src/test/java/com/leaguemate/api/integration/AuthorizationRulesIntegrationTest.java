@@ -23,6 +23,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -238,7 +239,7 @@ class AuthorizationRulesIntegrationTest {
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isNotFound());
 
-        assertEquals(1, teamMemberRepository.count());
+        assertTrue(teamMemberRepository.existsById(memberId));
     }
 
     @Test
@@ -453,5 +454,85 @@ class AuthorizationRulesIntegrationTest {
         mockMvc.perform(delete("/api/tournaments/" + tournamentId + "/organizers/" + ownerId)
                         .header("Authorization", "Bearer " + ownerToken))
                 .andExpect(status().isNoContent());
+    }
+
+    @Test
+    @DisplayName("Chi crea una squadra ne diventa proprietario e capitano e la gestisce da solo")
+    void teamOwner_ManagesOwnTeam_OthersAreForbidden() throws Exception {
+        Long playerId = userRepository.findByUsername("player").orElseThrow().getId();
+        Long intruderId = userRepository.findByUsername("intruder").orElseThrow().getId();
+
+        String body = mockMvc.perform(post("/api/teams")
+                        .header("Authorization", "Bearer " + userToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new CreateTeamRequest("Squadra di Player", null))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.ownerId").value(playerId))
+                .andReturn().getResponse().getContentAsString();
+        Long teamId = objectMapper.readTree(body).get("id").asLong();
+
+        mockMvc.perform(get("/api/teams/" + teamId + "/members")
+                        .header("Authorization", "Bearer " + userToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].username").value("player"))
+                .andExpect(jsonPath("$[0].teamRole").value("CAPTAIN"));
+
+        mockMvc.perform(put("/api/teams/" + teamId)
+                        .header("Authorization", "Bearer " + otherOrganizerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new CreateTeamRequest("Rubata", null))))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(post("/api/teams/" + teamId + "/members")
+                        .header("Authorization", "Bearer " + otherOrganizerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new AddTeamMemberRequest(intruderId, TeamRole.PLAYER))))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(put("/api/teams/" + teamId)
+                        .header("Authorization", "Bearer " + userToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new CreateTeamRequest("Squadra Rinominata", null))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Squadra Rinominata"));
+
+        mockMvc.perform(post("/api/teams/" + teamId + "/members")
+                        .header("Authorization", "Bearer " + userToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new AddTeamMemberRequest(intruderId, TeamRole.PLAYER))))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(put("/api/teams/" + teamId)
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new CreateTeamRequest("Modificata da Admin", null))))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("Il telefono nel profilo e' visibile solo al proprietario o a un ADMIN")
+    void getUserProfile_HidesPhone_FromOtherUsers() throws Exception {
+        Long ownerId = userRepository.findByUsername("owner").orElseThrow().getId();
+
+        mockMvc.perform(put("/api/users/" + ownerId + "/profile")
+                        .header("Authorization", "Bearer " + ownerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bio\": \"Organizzatore\", \"phoneNumber\": \"+39 333 1234567\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/users/" + ownerId + "/profile")
+                        .header("Authorization", "Bearer " + userToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.bio").value("Organizzatore"))
+                .andExpect(jsonPath("$.phoneNumber").doesNotExist());
+
+        mockMvc.perform(get("/api/users/" + ownerId + "/profile")
+                        .header("Authorization", "Bearer " + ownerToken))
+                .andExpect(jsonPath("$.phoneNumber").value("+39 333 1234567"));
+
+        mockMvc.perform(get("/api/users/" + ownerId + "/profile")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(jsonPath("$.phoneNumber").value("+39 333 1234567"));
     }
 }

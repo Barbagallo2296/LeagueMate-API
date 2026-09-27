@@ -11,6 +11,7 @@ import org.jspecify.annotations.NonNull;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -60,6 +61,13 @@ public class LoginRateLimitFilter extends OncePerRequestFilter {
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    @Scheduled(fixedDelayString = "${security.login-rate-limit.cleanup-interval:10m}")
+    public int evictIdleBuckets() {
+        int before = buckets.size();
+        buckets.values().removeIf(bucket -> bucket.getAvailableTokens() >= capacity);
+        return before - buckets.size();
     }
 
     private Bucket newBucket() {

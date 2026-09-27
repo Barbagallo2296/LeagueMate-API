@@ -20,7 +20,7 @@ public class TeamMemberController {
     private final TeamMemberService teamMemberService;
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'ORGANIZER')")
+    @PreAuthorize("hasRole('ADMIN') or @teamSecurity.isOwner(#teamId, authentication)")
     public ResponseEntity<TeamMemberResponse> addMember(
             @PathVariable Long teamId,
             @Valid @RequestBody AddTeamMemberRequest request
@@ -36,7 +36,7 @@ public class TeamMemberController {
     }
 
     @DeleteMapping("/{memberId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'ORGANIZER')")
+    @PreAuthorize("hasRole('ADMIN') or @teamSecurity.isOwner(#teamId, authentication)")
     public ResponseEntity<Void> removeMember(
             @PathVariable Long teamId,
             @PathVariable Long memberId

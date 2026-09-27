@@ -45,6 +45,17 @@ public final class UserMapper {
         return user;
     }
 
+    public static UserProfileResponse toPublicProfile(UserProfileResponse profile) {
+        return new UserProfileResponse(
+                profile.id(),
+                profile.userId(),
+                profile.username(),
+                profile.bio(),
+                profile.avatarUrl(),
+                null
+        );
+    }
+
     public static UserProfileResponse toProfileResponse(User user) {
         UserProfile profile = user.getProfile();
 

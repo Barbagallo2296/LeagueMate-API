@@ -1,0 +1,3 @@
+ALTER TABLE teams ADD COLUMN owner_id BIGINT NULL;
+
+ALTER TABLE teams ADD CONSTRAINT fk_team_owner FOREIGN KEY (owner_id) REFERENCES users (id) ON DELETE SET NULL;

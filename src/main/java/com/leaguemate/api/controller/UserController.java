@@ -64,8 +64,14 @@ public class UserController {
     }
 
     @GetMapping("/{id}/profile")
-    public ResponseEntity<UserProfileResponse> getUserProfile(@PathVariable Long id) {
-        return ResponseEntity.ok(userService.getProfile(id));
+    public ResponseEntity<UserProfileResponse> getUserProfile(
+            @PathVariable Long id,
+            @AuthenticationPrincipal User currentUser
+    ) {
+        UserProfileResponse profile = userService.getProfile(id);
+
+        boolean canSeePhone = currentUser.getRole() == Role.ADMIN || currentUser.getId().equals(id);
+        return ResponseEntity.ok(canSeePhone ? profile : UserMapper.toPublicProfile(profile));
     }
 
     @PutMapping("/{id}/profile")

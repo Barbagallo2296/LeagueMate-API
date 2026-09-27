@@ -1,10 +1,15 @@
 package com.leaguemate.api.service;
 
+import com.leaguemate.api.entity.Role;
 import com.leaguemate.api.entity.Team;
+import com.leaguemate.api.entity.TeamMember;
+import com.leaguemate.api.entity.TeamRole;
 import com.leaguemate.api.entity.TournamentRegistration;
+import com.leaguemate.api.entity.User;
 import com.leaguemate.api.exception.ResourceConflictException;
 import com.leaguemate.api.exception.ResourceNotFoundException;
 import com.leaguemate.api.repository.TeamRepository;
+import com.leaguemate.api.repository.UserRepository;
 import com.leaguemate.api.service.impl.TeamServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,10 +36,14 @@ class TeamServiceImplTest {
     @Mock
     private TeamRepository teamRepository;
 
+    @Mock
+    private UserRepository userRepository;
+
     @InjectMocks
     private TeamServiceImpl teamService;
 
     private Team team;
+    private User owner;
 
     @BeforeEach
     void setUp() {
@@ -43,14 +52,20 @@ class TeamServiceImplTest {
         team.setName("Straw Hat FC");
         team.setLogoUrl("https://images.com/luffy.png");
         team.setRegistrations(new ArrayList<>());
+
+        owner = new User();
+        owner.setId(7L);
+        owner.setUsername("capitano");
+        owner.setRole(Role.USER);
     }
 
     @Test
     void createTeam_Success() {
         when(teamRepository.findByName("Straw Hat FC")).thenReturn(Optional.empty());
+        when(userRepository.findByUsername("capitano")).thenReturn(Optional.of(owner));
         when(teamRepository.save(any(Team.class))).thenReturn(team);
 
-        Team created = teamService.createTeam(team);
+        Team created = teamService.createTeam(team, "capitano");
 
         assertNotNull(created);
         assertEquals("Straw Hat FC", created.getName());
@@ -58,10 +73,25 @@ class TeamServiceImplTest {
     }
 
     @Test
+    void createTeam_MakesCreatorOwnerAndCaptain() {
+        when(teamRepository.findByName("Straw Hat FC")).thenReturn(Optional.empty());
+        when(userRepository.findByUsername("capitano")).thenReturn(Optional.of(owner));
+        when(teamRepository.save(any(Team.class))).thenReturn(team);
+
+        teamService.createTeam(team, "capitano");
+
+        assertEquals(owner, team.getOwner());
+        assertEquals(1, team.getMembers().size());
+        TeamMember captain = team.getMembers().get(0);
+        assertEquals(owner, captain.getUser());
+        assertEquals(TeamRole.CAPTAIN, captain.getTeamRole());
+    }
+
+    @Test
     void createTeam_ThrowsConflict_WhenNameExists() {
         when(teamRepository.findByName("Straw Hat FC")).thenReturn(Optional.of(team));
 
-        assertThrows(ResourceConflictException.class, () -> teamService.createTeam(team));
+        assertThrows(ResourceConflictException.class, () -> teamService.createTeam(team, "capitano"));
         verify(teamRepository, never()).save(any(Team.class));
     }
 

@@ -47,7 +47,7 @@ src/main/java/com/leaguemate/api/
 ├── config/ # Configurazione OpenAPI
 ├── dto/ # Java Records (input/output)
 ├── mapper/ # Conversione Entity → DTO, in un unico punto
-├── security/ # Authorization Server, token opachi, SecurityConfig, ownership dei tornei
+├── security/ # Authorization Server, token opachi, SecurityConfig, ownership di tornei e squadre
 └── exception/ # Handler eccezioni
 
 src/main/resources/db/
@@ -65,7 +65,7 @@ I mapper sono classi statiche senza stato. I service restituiscono un DTO quando
 | **Auth** | `AuthController` | `AuthService` | Registrazione, login, rinnovo e revoca dei token |
 | **User** | `UserController` | `UserService` | Gestione utenti, ruoli e profilo (`@OneToOne`) |
 | **Tournament** | `TournamentController` | `TournamentService` | CRUD tornei, iscrizioni, calendario, classifica, statistiche, co-organizzatori |
-| **Team** | `TeamController` | `TeamService` | CRUD squadre |
+| **Team** | `TeamController` | `TeamService` | CRUD squadre con proprietario |
 | **TeamMember** | `TeamMemberController` | `TeamMemberService` | Membri delle squadre con ruoli |
 | **Match** | `MatchController` | `MatchService` | Risultati delle partite |
 
@@ -100,7 +100,7 @@ I mapper sono classi statiche senza stato. I service restituiscono un DTO quando
 
 ### Schema del database (Flyway)
 
-Lo schema è gestito **solo da Flyway**: ogni modifica è una migrazione versionata in `db/migration` (`V1__init_schema.sql`, `V2__limit_profile_bio_length.sql`, `V3__add_double_round_robin.sql`). Hibernate gira con `ddl-auto=validate`: non modifica mai il database e all'avvio verifica che le entity corrispondano alle tabelle.
+Lo schema è gestito **solo da Flyway**: ogni modifica è una migrazione versionata in `db/migration` (`V1__init_schema.sql`, `V2__limit_profile_bio_length.sql`, `V3__add_double_round_robin.sql`, `V4__oauth2_authorizations.sql`, `V5__add_team_owner.sql`). Hibernate gira con `ddl-auto=validate`: non modifica mai il database e all'avvio verifica che le entity corrispondano alle tabelle.
 
 - I **test di integrazione** applicano le stesse migrazioni su H2, quindi girano sullo schema reale.
 - I **dati demo** (`db/demo/R__demo_data.sql`) si caricano solo aggiungendo `classpath:db/demo` a `FLYWAY_LOCATIONS`, come fa il `docker-compose.yml`.
@@ -114,7 +114,7 @@ Lo schema è gestito **solo da Flyway**: ogni modifica è una migrazione version
 
 - **User** — implementa `UserDetails`, ruoli enum (`ADMIN`, `ORGANIZER`, `USER`)
 - **UserProfile** — dati aggiuntivi (bio, avatar, telefono), relazione `@OneToOne`
-- **Team** — squadra con membri e iscrizioni
+- **Team** — squadra con proprietario (`@ManyToOne` verso `User`), membri e iscrizioni
 - **TeamMember** — giunzione ricca User↔Team con `TeamRole` (CAPTAIN/PLAYER/RESERVE) e `joinedAt`
 - **Tournament** — torneo con stagione, stato, configurazione punti, formula (sola andata o andata e ritorno) e **co-organizzatori**
 - **TournamentRegistration** — giunzione ricca Tournament↔Team con `RegistrationStatus` e `registeredAt`
@@ -155,6 +155,7 @@ return table.values().stream()
 - I punti per vittoria e pareggio si modificano solo in stato `DRAFT`: dopo l'avvio si possono cambiare solo nome e stagione
 - Un pareggio non può valere più punti di una vittoria
 - Solo un utente con ruolo `ORGANIZER` o `ADMIN` può diventare co-organizzatore di un torneo, e l'ultimo organizzatore rimasto non può essere rimosso
+- Chi crea una squadra ne diventa proprietario ed entra fra i membri come `CAPTAIN`
 
 ---
 
@@ -170,10 +171,11 @@ return table.values().stream()
 - Autorizzazione **per ruolo** (RBAC) tramite `@PreAuthorize` e `@EnableMethodSecurity`
 - Autorizzazione **a livello di risorsa**: un utente può modificare solo il proprio profilo, un `ADMIN` qualsiasi profilo
 - **Ownership dei tornei**: chi crea un torneo ne diventa organizzatore; un `ORGANIZER` può gestire (modifica, iscrizioni, calendario, risultati, chiusura, co-organizzatori) **solo i tornei di cui è organizzatore**, tramite il bean `TournamentSecurity` usato nelle espressioni `@PreAuthorize`. Un `ADMIN` può gestire qualsiasi torneo
+- **Ownership delle squadre**: chi crea una squadra ne diventa proprietario e capitano; modificarla e gestirne i membri è consentito solo al proprietario o a un `ADMIN`, tramite il bean `TeamSecurity`. Qualsiasi utente autenticato può creare la propria squadra
 - Richiesta senza token → `401`; autenticato ma senza permessi → `403` (`AuthenticationEntryPoint` e `AccessDeniedHandler` dedicati)
-- L'email di un utente è visibile solo all'utente stesso o a un `ADMIN`
+- L'email di un utente e il numero di telefono del suo profilo sono visibili solo all'utente stesso o a un `ADMIN`
 - Messaggi di errore generici in fase di login per prevenire la *user enumeration*
-- **Rate limit sul login** (`LoginRateLimitFilter`, Bucket4j): 10 tentativi al minuto per IP, oltre i quali la risposta è `429 Too Many Requests` con header `Retry-After`. Configurabile con `LOGIN_RATE_LIMIT_CAPACITY` e `LOGIN_RATE_LIMIT_PERIOD`
+- **Rate limit sul login** (`LoginRateLimitFilter`, Bucket4j): 10 tentativi al minuto per IP, oltre i quali la risposta è `429 Too Many Requests` con header `Retry-After`. Configurabile con `LOGIN_RATE_LIMIT_CAPACITY` e `LOGIN_RATE_LIMIT_PERIOD`. Dietro un reverse proxy l'IP reale viene letto da `X-Forwarded-For` (`server.forward-headers-strategy=native`: Tomcat si fida solo dei proxy interni, quindi un client esterno non può falsificarlo), e i contatori inattivi vengono eliminati periodicamente
 - **CORS** abilitato per il frontend: le origini ammesse si configurano con `CORS_ALLOWED_ORIGINS` (separate da virgola; default `http://localhost:5173,http://localhost:3000`, le porte di sviluppo di Vite e Create React App)
 
 ---
@@ -219,7 +221,7 @@ Le liste di tornei, squadre e utenti sono **paginate**: `?page=0&size=20&sort=na
 | GET | `/api/users` | **ADMIN** |
 | GET | `/api/users/{id}` | Autenticato |
 | PUT | `/api/users/{id}/role` | **ADMIN** |
-| GET | `/api/users/{id}/profile` | Autenticato |
+| GET | `/api/users/{id}/profile` | Autenticato — il telefono è visibile solo al proprietario o a un **ADMIN** |
 | PUT | `/api/users/{id}/profile` | Proprietario o **ADMIN** |
 
 ### Tornei (14)
@@ -250,18 +252,18 @@ Le liste di tornei, squadre e utenti sono **paginate**: `?page=0&size=20&sort=na
 ### Squadre (5)
 | Metodo | Endpoint | Accesso |
 |---|---|---|
-| POST | `/api/teams` | Autenticato |
+| POST | `/api/teams` | Autenticato — chi crea diventa proprietario e capitano |
 | GET | `/api/teams` | Autenticato |
 | GET | `/api/teams/{id}` | Autenticato |
-| PUT | `/api/teams/{id}` | **ADMIN / ORGANIZER** |
+| PUT | `/api/teams/{id}` | **ADMIN / proprietario della squadra** |
 | DELETE | `/api/teams/{id}` | **ADMIN** |
 
 ### Membri delle squadre (3)
 | Metodo | Endpoint | Accesso |
 |---|---|---|
-| POST | `/api/teams/{teamId}/members` | **ADMIN / ORGANIZER** |
+| POST | `/api/teams/{teamId}/members` | **ADMIN / proprietario della squadra** |
 | GET | `/api/teams/{teamId}/members` | Autenticato |
-| DELETE | `/api/teams/{teamId}/members/{memberId}` | **ADMIN / ORGANIZER** |
+| DELETE | `/api/teams/{teamId}/members/{memberId}` | **ADMIN / proprietario della squadra** |
 
 ### Partite (2)
 | Metodo | Endpoint | Accesso |
@@ -313,7 +315,7 @@ Tutti con password `password123`:
 | `shanks_player` | USER |
 | `zoro_player` | USER |
 
-Il torneo di esempio è in stato `DRAFT` con 4 squadre iscritte e `law_organizer` come organizzatore: è possibile lanciare subito `generate-rounds` e vedere il calendario generato dal metodo del cerchio.
+Ogni squadra demo ha come proprietario il suo capitano: `manuel22` (Straw Hat FC), `law_organizer` (Heart Pirates e Blackbeard City), `shanks_player` (Red Hair United). Il torneo di esempio è in stato `DRAFT` con 4 squadre iscritte e `law_organizer` come organizzatore: è possibile lanciare subito `generate-rounds` e vedere il calendario generato dal metodo del cerchio.
 
 ---
 
@@ -341,8 +343,8 @@ export FLYWAY_LOCATIONS=classpath:db/migration,classpath:db/demo   # facoltativo
 
 ## Testing
 
-**166 test** con JUnit 5, Mockito, Spring Security Test e MockMvc — tutti verdi.
-**Code coverage: 93%** (requisito minimo 35%).
+**171 test** con JUnit 5, Mockito, Spring Security Test e MockMvc — tutti verdi.
+**Code coverage: 94%** (requisito minimo 35%).
 
 ### Test unitari (service, security, exception)
 
@@ -350,11 +352,12 @@ export FLYWAY_LOCATIONS=classpath:db/migration,classpath:db/demo   # facoltativo
 |---|---|---|
 | `TournamentServiceImpl` | 43 | CRUD, **generazione calendario** (anche andata e ritorno), **classifica**, **statistiche**, co-organizzatori, chiusura torneo, calendario e squadre iscritte |
 | `UserServiceImpl` | 18 | Registrazione, ruoli, **profilo con autorizzazione a livello di risorsa** |
-| `TeamServiceImpl` | 9 | CRUD completo, unicità nome, vincoli di cancellazione |
+| `TeamServiceImpl` | 10 | CRUD completo, proprietario e capitano alla creazione, unicità nome, vincoli di cancellazione |
 | `TeamMemberServiceImpl` | 10 | Aggiunta membri, duplicati, rimozione vincolata alla squadra |
 | `GlobalExceptionHandler` | 8 | 400, 401, 404, 409, 500, token non valido e mascheramento messaggi |
 | `MatchServiceImpl` | 7 | Aggiornamento risultato, blocco su torneo non attivo, giornata inesistente, caricamento eager |
 | `AuthServiceImpl` | 6 | Registrazione con hashing, login, rinnovo, logout e logout-all |
+| `LoginRateLimitFilter` | 2 | Pulizia dei contatori inattivi del rate limit |
 | `TournamentControllerSecurityTest` | 3 | **403 con USER, 201 con ORGANIZER** (`@WebMvcTest`) |
 
 ### Test di integrazione (H2 in memoria, `@SpringBootTest` + MockMvc)
@@ -367,7 +370,7 @@ export FLYWAY_LOCATIONS=classpath:db/migration,classpath:db/demo   # facoltativo
 | `TournamentFlowIntegrationTest` | 10 | Ciclo di vita completo del torneo end-to-end |
 | `InfrastructureIntegrationTest` | 6 | Rate limit sul login, health check, specifica OpenAPI |
 | `MySqlSchemaIntegrationTest` | 1 | Migrazioni Flyway e dati demo su **MySQL 8 reale** (Testcontainers) |
-| `AuthorizationRulesIntegrationTest` | 18 | Ownership dei tornei (compreso l'ultimo organizzatore), chiusura torneo, andata e ritorno, paginazione, calendario, squadre iscritte, i miei tornei, CORS, membri, privacy email, 401/400/404/409 |
+| `AuthorizationRulesIntegrationTest` | 20 | Ownership dei tornei (compreso l'ultimo organizzatore) e delle squadre, chiusura torneo, andata e ritorno, paginazione, calendario, squadre iscritte, i miei tornei, CORS, membri, privacy di email e telefono, 401/400/404/409 |
 | `ApiApplicationTests` | 1 | Caricamento del contesto Spring |
 
 I test di integrazione girano su un database H2 in memoria (profilo `test`) su cui Flyway applica le stesse migrazioni della produzione, quindi la suite si esegue senza un MySQL attivo. `MySqlSchemaIntegrationTest` avvia invece un MySQL 8 in un container: gira quando Docker è disponibile (sempre in CI) e viene saltato altrimenti.
@@ -379,10 +382,10 @@ I test di integrazione girano su un database H2 in memoria (profilo `test`) su c
 | `security` | 92% |
 | `exception` | 83% |
 | `service.impl` | 97% |
-| `mapper` | 100% |
+| `mapper` | 99% |
 | `config` | 100% |
-| `controller` | 81% |
-| **Totale** | **93%** |
+| `controller` | 89% |
+| **Totale** | **94%** |
 
 > `dto` ed `entity` sono esclusi dal report (boilerplate Lombok). I controller sono **inclusi** e coperti dai test di integrazione.
 

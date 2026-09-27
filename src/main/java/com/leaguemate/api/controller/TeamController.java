@@ -14,6 +14,7 @@ import org.springframework.data.web.PagedModel;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Set;
@@ -28,12 +29,15 @@ public class TeamController {
     private final TeamService teamService;
 
     @PostMapping
-    public ResponseEntity<TeamResponse> createTeam(@Valid @RequestBody CreateTeamRequest request) {
+    public ResponseEntity<TeamResponse> createTeam(
+            @Valid @RequestBody CreateTeamRequest request,
+            Authentication authentication
+    ) {
         Team team = new Team();
         team.setName(request.name());
         team.setLogoUrl(request.logoUrl());
 
-        Team saved = teamService.createTeam(team);
+        Team saved = teamService.createTeam(team, authentication.getName());
         return new ResponseEntity<>(TeamMapper.toResponse(saved), HttpStatus.CREATED);
     }
 
@@ -50,7 +54,7 @@ public class TeamController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'ORGANIZER')")
+    @PreAuthorize("hasRole('ADMIN') or @teamSecurity.isOwner(#id, authentication)")
     public ResponseEntity<TeamResponse> updateTeam(
             @PathVariable Long id,
             @Valid @RequestBody UpdateTeamRequest request

@@ -15,6 +15,7 @@ public final class TeamMapper {
                 team.getId(),
                 team.getName(),
                 team.getLogoUrl(),
+                team.getOwner() != null ? team.getOwner().getId() : null,
                 team.getCreatedAt()
         );
     }
