@@ -142,7 +142,7 @@ return table.values().stream()
 ```
 
 ### Statistiche del torneo
-`getTournamentStats()` aggrega dati con query `COUNT` JPQL: squadre iscritte, partite giocate/rimanenti, gol totali, media gol a partita, miglior attacco.
+`getTournamentStats()` aggrega squadre iscritte, partite giocate/rimanenti, gol totali, media gol a partita e miglior attacco. Il conteggio delle partite per stato è una sola query `GROUP BY` con proiezione a interfaccia, e la classifica viene calcolata una sola volta e riutilizzata. Il miglior attacco resta vuoto finché non viene segnato almeno un gol.
 
 ### Validazioni di dominio
 - Le squadre possono essere iscritte **solo a tornei in stato `DRAFT`**
@@ -153,7 +153,8 @@ return table.values().stream()
 - Un torneo si chiude (`ACTIVE → COMPLETED`) solo quando tutte le partite sono state giocate; da quel momento i risultati sono bloccati
 - Non è possibile declassare l'ultimo `ADMIN` rimasto
 - I punti per vittoria e pareggio si modificano solo in stato `DRAFT`: dopo l'avvio si possono cambiare solo nome e stagione
-- Solo un utente con ruolo `ORGANIZER` o `ADMIN` può diventare co-organizzatore di un torneo
+- Un pareggio non può valere più punti di una vittoria
+- Solo un utente con ruolo `ORGANIZER` o `ADMIN` può diventare co-organizzatore di un torneo, e l'ultimo organizzatore rimasto non può essere rimosso
 
 ---
 
@@ -290,6 +291,15 @@ Nessuna configurazione è obbligatoria: ogni variabile ha un valore predefinito.
 cp .env.example .env
 ```
 
+| Variabile | Default | Uso |
+|---|---|---|
+| `DB_PORT` / `API_PORT` | `3306` / `8080` | Porte esposte sulla macchina (per esempio `DB_PORT=3307` se c'è già un MySQL locale) |
+| `MYSQL_ROOT_PASSWORD`, `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD` | `root`, `leaguemate_db`, `leaguemate_user`, `leaguemate_pass` | Credenziali del database |
+| `ACCESS_TOKEN_TTL` / `REFRESH_TOKEN_TTL` | `15m` / `7d` | Durata dei token |
+| `CORS_ALLOWED_ORIGINS` | `http://localhost:5173,http://localhost:3000` | Origini del frontend ammesse |
+| `LOGIN_RATE_LIMIT_CAPACITY` / `LOGIN_RATE_LIMIT_PERIOD` | `10` / `1m` | Tentativi di login consentiti per IP |
+| `SWAGGER_ENABLED` | `true` | Abilita Swagger UI e la specifica OpenAPI |
+
 Un solo comando avvia MySQL 8 e l'applicazione. All'avvio Flyway applica le migrazioni dello schema e carica i dati demo. Il Dockerfile scarica le dipendenze Maven in un layer separato (le build successive riusano la cache se il `pom.xml` non cambia), l'applicazione gira con un utente non-root e il container ha un `HEALTHCHECK` sull'endpoint di Actuator. Il build è multi-stage (Maven → JRE), MySQL ha un healthcheck e l'app attende che sia pronto.
 
 ### Utenti precaricati
@@ -331,14 +341,14 @@ export FLYWAY_LOCATIONS=classpath:db/migration,classpath:db/demo   # facoltativo
 
 ## Testing
 
-**157 test** con JUnit 5, Mockito, Spring Security Test e MockMvc — tutti verdi.
-**Code coverage: 92%** (requisito minimo 35%).
+**166 test** con JUnit 5, Mockito, Spring Security Test e MockMvc — tutti verdi.
+**Code coverage: 93%** (requisito minimo 35%).
 
 ### Test unitari (service, security, exception)
 
 | Classe testata | Test | Descrizione |
 |---|---|---|
-| `TournamentServiceImpl` | 41 | CRUD, **generazione calendario** (anche andata e ritorno), **classifica**, **statistiche**, co-organizzatori, chiusura torneo, calendario e squadre iscritte |
+| `TournamentServiceImpl` | 43 | CRUD, **generazione calendario** (anche andata e ritorno), **classifica**, **statistiche**, co-organizzatori, chiusura torneo, calendario e squadre iscritte |
 | `UserServiceImpl` | 18 | Registrazione, ruoli, **profilo con autorizzazione a livello di risorsa** |
 | `TeamServiceImpl` | 9 | CRUD completo, unicità nome, vincoli di cancellazione |
 | `TeamMemberServiceImpl` | 10 | Aggiunta membri, duplicati, rimozione vincolata alla squadra |
@@ -353,10 +363,11 @@ export FLYWAY_LOCATIONS=classpath:db/migration,classpath:db/demo   # facoltativo
 |---|---|---|
 | `AuthIntegrationTest` | 10 | Flusso register→login→endpoint protetto, RBAC, 401 identici, password mai esposta |
 | `TokenAuthenticationIntegrationTest` | 10 | Token opachi, hash nel database, rotazione dei refresh token, logout, logout-all, scadenze, pulizia automatica |
+| `InputValidationIntegrationTest` | 6 | Valori al limite: lunghezze allineate alle colonne del database, password oltre il limite di BCrypt, punti incoerenti |
 | `TournamentFlowIntegrationTest` | 10 | Ciclo di vita completo del torneo end-to-end |
 | `InfrastructureIntegrationTest` | 6 | Rate limit sul login, health check, specifica OpenAPI |
 | `MySqlSchemaIntegrationTest` | 1 | Migrazioni Flyway e dati demo su **MySQL 8 reale** (Testcontainers) |
-| `AuthorizationRulesIntegrationTest` | 17 | Ownership dei tornei, chiusura torneo, andata e ritorno, paginazione, calendario, squadre iscritte, i miei tornei, CORS, membri, privacy email, 401/400/404/409 |
+| `AuthorizationRulesIntegrationTest` | 18 | Ownership dei tornei (compreso l'ultimo organizzatore), chiusura torneo, andata e ritorno, paginazione, calendario, squadre iscritte, i miei tornei, CORS, membri, privacy email, 401/400/404/409 |
 | `ApiApplicationTests` | 1 | Caricamento del contesto Spring |
 
 I test di integrazione girano su un database H2 in memoria (profilo `test`) su cui Flyway applica le stesse migrazioni della produzione, quindi la suite si esegue senza un MySQL attivo. `MySqlSchemaIntegrationTest` avvia invece un MySQL 8 in un container: gira quando Docker è disponibile (sempre in CI) e viene saltato altrimenti.
@@ -370,8 +381,8 @@ I test di integrazione girano su un database H2 in memoria (profilo `test`) su c
 | `service.impl` | 97% |
 | `mapper` | 100% |
 | `config` | 100% |
-| `controller` | 79% |
-| **Totale** | **92%** |
+| `controller` | 81% |
+| **Totale** | **93%** |
 
 > `dto` ed `entity` sono esclusi dal report (boilerplate Lombok). I controller sono **inclusi** e coperti dai test di integrazione.
 

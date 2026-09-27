@@ -3,6 +3,7 @@ package com.leaguemate.api.service;
 import com.leaguemate.api.dto.StandingEntry;
 import com.leaguemate.api.dto.TournamentStatsResponse;
 import com.leaguemate.api.entity.*;
+import com.leaguemate.api.exception.BadRequestException;
 import com.leaguemate.api.exception.ResourceConflictException;
 import com.leaguemate.api.exception.ResourceNotFoundException;
 import com.leaguemate.api.repository.MatchRepository;
@@ -117,8 +118,6 @@ class TournamentServiceImplTest {
         return match;
     }
 
-    // --- CRUD ---
-
     @Test
     void createTournament_Success() {
         when(userRepository.findByUsername("organizer1")).thenReturn(Optional.of(user));
@@ -140,8 +139,6 @@ class TournamentServiceImplTest {
 
         assertTrue(created.getOrganizers().contains(user));
     }
-
-    // --- Chiusura torneo ---
 
     @Test
     void completeTournament_Success_WhenAllMatchesPlayed() {
@@ -253,6 +250,15 @@ class TournamentServiceImplTest {
     }
 
     @Test
+    void updateTournament_ThrowsBadRequest_WhenDrawWorthMoreThanWin() {
+        when(tournamentRepository.findById(1L)).thenReturn(Optional.of(tournament));
+
+        assertThrows(BadRequestException.class,
+                () -> tournamentService.updateTournament(1L, "Champions League", "2026/2027", 1, 3));
+        verify(tournamentRepository, never()).save(any(Tournament.class));
+    }
+
+    @Test
     void updateTournament_ThrowsConflict_WhenCompleted() {
         tournament.setStatus(TournamentStatus.COMPLETED);
         when(tournamentRepository.findById(1L)).thenReturn(Optional.of(tournament));
@@ -279,8 +285,6 @@ class TournamentServiceImplTest {
         assertThrows(ResourceConflictException.class, () -> tournamentService.deleteTournament(1L));
         verify(tournamentRepository, never()).delete(any(Tournament.class));
     }
-
-    // --- Iscrizioni ---
 
     @Test
     void registerTeamToTournament_Success() {
@@ -314,8 +318,6 @@ class TournamentServiceImplTest {
         assertThrows(ResourceConflictException.class,
                 () -> tournamentService.registerTeamToTournament(1L, 1L));
     }
-
-    // --- Generazione calendario (round-robin, metodo del cerchio) ---
 
     @Test
     void generateRounds_WithFourTeams_CreatesThreeRounds() {
@@ -355,11 +357,9 @@ class TournamentServiceImplTest {
 
         List<Round> rounds = tournamentService.generateRounds(1L);
 
-        // 4 squadre: 3 giornate di andata + 3 di ritorno, 12 partite
         assertEquals(6, rounds.size());
         assertEquals(12, rounds.stream().mapToInt(r -> r.getMatches().size()).sum());
 
-        // La giornata 4 è la giornata 1 a campi invertiti
         Round first = rounds.get(0);
         Round mirror = rounds.get(3);
         assertEquals(4, mirror.getRoundNumber());
@@ -368,7 +368,6 @@ class TournamentServiceImplTest {
             assertEquals(first.getMatches().get(i).getAwayTeam(), mirror.getMatches().get(i).getHomeTeam());
         }
 
-        // Ogni coppia ordinata (casa, trasferta) compare esattamente una volta
         long distinctOrderedPairs = rounds.stream()
                 .flatMap(r -> r.getMatches().stream())
                 .map(m -> m.getHomeTeam().getId() + "-" + m.getAwayTeam().getId())
@@ -452,8 +451,6 @@ class TournamentServiceImplTest {
         assertThrows(ResourceConflictException.class, () -> tournamentService.generateRounds(1L));
         verify(tournamentRepository, never()).save(any(Tournament.class));
     }
-
-    // --- Classifica ---
 
     @Test
     void calculateStandings_WithCompletedMatch_ReturnsSortedStandings() {
@@ -547,8 +544,6 @@ class TournamentServiceImplTest {
         assertTrue(standings.stream().allMatch(s -> s.points() == 0));
     }
 
-    // --- Statistiche ---
-
     @Test
     void getTournamentStats_ReturnsCorrectStats() {
         when(tournamentRepository.findById(1L)).thenReturn(Optional.of(tournament));
@@ -585,9 +580,9 @@ class TournamentServiceImplTest {
         assertEquals(6L, stats.remainingMatches());
         assertEquals(0, stats.totalGoals());
         assertEquals(0.0, stats.averageGoalsPerMatch());
+        assertNull(stats.topScoringTeam());
+        assertEquals(0, stats.topScoringTeamGoals());
     }
-
-    // --- Co-organizzatori ---
 
     @Test
     void addOrganizer_Success() {
@@ -623,7 +618,12 @@ class TournamentServiceImplTest {
 
     @Test
     void removeOrganizer_Success() {
+        User coOrganizer = new User();
+        coOrganizer.setId(2L);
+        coOrganizer.setUsername("coorganizer");
+        coOrganizer.setRole(Role.ORGANIZER);
         tournament.getOrganizers().add(user);
+        tournament.getOrganizers().add(coOrganizer);
         when(tournamentRepository.findById(1L)).thenReturn(Optional.of(tournament));
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         when(tournamentRepository.save(any(Tournament.class))).thenReturn(tournament);
@@ -632,6 +632,17 @@ class TournamentServiceImplTest {
 
         assertFalse(tournament.getOrganizers().contains(user));
         verify(tournamentRepository, times(1)).save(tournament);
+    }
+
+    @Test
+    void removeOrganizer_ThrowsConflict_WhenLastOrganizer() {
+        tournament.getOrganizers().add(user);
+        when(tournamentRepository.findById(1L)).thenReturn(Optional.of(tournament));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        assertThrows(ResourceConflictException.class, () -> tournamentService.removeOrganizer(1L, 1L));
+        assertTrue(tournament.getOrganizers().contains(user));
+        verify(tournamentRepository, never()).save(any(Tournament.class));
     }
 
     @Test

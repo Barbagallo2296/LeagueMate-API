@@ -3,6 +3,7 @@ package com.leaguemate.api.service.impl;
 import com.leaguemate.api.dto.StandingEntry;
 import com.leaguemate.api.dto.TournamentStatsResponse;
 import com.leaguemate.api.entity.*;
+import com.leaguemate.api.exception.BadRequestException;
 import com.leaguemate.api.exception.ResourceConflictException;
 import com.leaguemate.api.exception.ResourceNotFoundException;
 import com.leaguemate.api.repository.*;
@@ -76,8 +77,6 @@ public class TournamentServiceImpl implements TournamentService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with username: " + creatorUsername));
 
         tournament.setStatus(TournamentStatus.DRAFT);
-        // Chi crea il torneo ne è il primo organizzatore: senza questo passaggio
-        // un ORGANIZER non potrebbe gestire il torneo appena creato.
         tournament.getOrganizers().add(creator);
         return tournamentRepository.save(tournament);
     }
@@ -108,6 +107,10 @@ public class TournamentServiceImpl implements TournamentService {
 
         if (tournament.getStatus() == TournamentStatus.COMPLETED) {
             throw new ResourceConflictException("Cannot modify a completed tournament");
+        }
+
+        if (pointsForDraw > pointsForWin) {
+            throw new BadRequestException("A draw cannot be worth more points than a win");
         }
 
         boolean pointsChanged = tournament.getPointsForWin() != pointsForWin
@@ -247,8 +250,6 @@ public class TournamentServiceImpl implements TournamentService {
         return tournament.getRounds();
     }
 
-    // Girone di ritorno: stesse giornate dell'andata, nello stesso ordine,
-    // con casa e trasferta invertite (giornata N+k speculare alla giornata k).
     private List<Round> buildReturnLeg(List<Round> firstLeg, Tournament tournament) {
         List<Round> returnLeg = new ArrayList<>();
 
@@ -390,6 +391,7 @@ public class TournamentServiceImpl implements TournamentService {
                 : 0.0;
 
         StandingEntry topScorer = standings.stream()
+                .filter(entry -> entry.goalsFor() > 0)
                 .max(Comparator.comparingInt(StandingEntry::goalsFor))
                 .orElse(null);
 
@@ -437,6 +439,10 @@ public class TournamentServiceImpl implements TournamentService {
 
         if (!tournament.getOrganizers().contains(user)) {
             throw new ResourceNotFoundException("User is not an organizer of this tournament");
+        }
+
+        if (tournament.getOrganizers().size() == 1) {
+            throw new ResourceConflictException("Cannot remove the last organizer of a tournament");
         }
 
         tournament.getOrganizers().remove(user);

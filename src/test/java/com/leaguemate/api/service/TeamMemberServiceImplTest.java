@@ -157,7 +157,6 @@ class TeamMemberServiceImplTest {
 
     @Test
     void removeMemberFromTeam_ThrowsNotFound_WhenMemberBelongsToAnotherTeam() {
-        // Il membro 1 appartiene alla squadra 1: la richiesta arriva dalla squadra 2
         when(teamMemberRepository.findByIdAndTeamId(1L, 2L)).thenReturn(Optional.empty());
 
         assertThrows(ResourceNotFoundException.class,

@@ -26,10 +26,6 @@ public interface MatchRepository extends JpaRepository<Match, Long> {
             """)
     List<StatusCount> countByStatus(@Param("tournamentId") Long tournamentId);
 
-    List<Match> findByRoundId(Long roundId);
-
-    List<Match> findByRoundTournamentIdAndStatus(Long tournamentId, MatchStatus status);
-
     @Query("""
             SELECT m FROM Match m
             JOIN FETCH m.homeTeam

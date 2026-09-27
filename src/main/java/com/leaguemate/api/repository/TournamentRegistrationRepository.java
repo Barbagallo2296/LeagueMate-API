@@ -12,11 +12,6 @@ import java.util.List;
 @Repository
 public interface TournamentRegistrationRepository extends JpaRepository<TournamentRegistration, Long> {
 
-    List<TournamentRegistration> findByTournamentId(Long tournamentId);
-
-    List<TournamentRegistration> findByTeamId(Long teamId);
-
-
     @Query("""
             SELECT DISTINCT r FROM TournamentRegistration r
             JOIN FETCH r.team

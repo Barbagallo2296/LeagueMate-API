@@ -145,7 +145,6 @@ public class TournamentController {
         return ResponseEntity.ok(tournamentService.getTournamentStats(tournamentId));
     }
 
-
     @PostMapping("/{tournamentId}/organizers/{userId}")
     @PreAuthorize(OWNER_OR_ADMIN)
     public ResponseEntity<Void> addOrganizer(

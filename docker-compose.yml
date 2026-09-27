@@ -34,6 +34,10 @@ services:
       FLYWAY_LOCATIONS: classpath:db/migration,classpath:db/demo
       ACCESS_TOKEN_TTL: ${ACCESS_TOKEN_TTL:-15m}
       REFRESH_TOKEN_TTL: ${REFRESH_TOKEN_TTL:-7d}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:3000}
+      LOGIN_RATE_LIMIT_CAPACITY: ${LOGIN_RATE_LIMIT_CAPACITY:-10}
+      LOGIN_RATE_LIMIT_PERIOD: ${LOGIN_RATE_LIMIT_PERIOD:-1m}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-true}
     depends_on:
       db:
         condition: service_healthy

@@ -19,7 +19,6 @@ public final class TeamMapper {
         );
     }
 
-    /** Legge user e team del membro: vanno caricati (JOIN FETCH) prima di chiudere la transazione. */
     public static TeamMemberResponse toMemberResponse(TeamMember member) {
         return new TeamMemberResponse(
                 member.getId(),

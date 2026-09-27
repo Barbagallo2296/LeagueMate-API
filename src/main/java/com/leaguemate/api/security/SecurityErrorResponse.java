@@ -7,11 +7,6 @@ import org.springframework.http.MediaType;
 import java.io.IOException;
 import java.time.LocalDateTime;
 
-/**
- * Scrive gli errori generati nella filter chain di Spring Security, prima del
- * DispatcherServlet e quindi fuori dalla portata del @RestControllerAdvice,
- * con lo stesso formato JSON usato dal GlobalExceptionHandler.
- */
 public final class SecurityErrorResponse {
 
     private SecurityErrorResponse() {

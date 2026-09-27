@@ -51,7 +51,6 @@ class AuthServiceImplTest {
         sampleUser.setUsername("testuser");
         sampleUser.setEmail("test@leaguemate.com");
         sampleUser.setPassword("password123");
-        // Rimosso il setRole per evitare conflitti sul nome dell'Enum
     }
 
     @Test

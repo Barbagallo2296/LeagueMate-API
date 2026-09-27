@@ -118,7 +118,6 @@ class AuthorizationRulesIntegrationTest {
         return objectMapper.readTree(body).get("id").asLong();
     }
 
-    /** Torneo creato da "owner" con due squadre iscritte: un calendario da una sola partita. */
     private Long createOwnedTournamentWithTwoTeams() throws Exception {
         String body = mockMvc.perform(post("/api/tournaments")
                         .header("Authorization", "Bearer " + ownerToken)
@@ -143,8 +142,6 @@ class AuthorizationRulesIntegrationTest {
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk());
     }
-
-    // --- Ownership dei tornei ---
 
     @Test
     @DisplayName("Il creatore del torneo ne diventa organizzatore")
@@ -192,8 +189,6 @@ class AuthorizationRulesIntegrationTest {
         generateRounds(tournamentId, otherOrganizerToken);
     }
 
-    // --- Ciclo di vita: chiusura del torneo ---
-
     @Test
     @DisplayName("Un torneo si chiude solo a partite concluse e poi i risultati sono bloccati")
     void completeTournament_ThenMatchResultsAreLocked() throws Exception {
@@ -223,8 +218,6 @@ class AuthorizationRulesIntegrationTest {
                 .andExpect(status().isConflict());
     }
 
-    // --- Membri delle squadre ---
-
     @Test
     @DisplayName("Un membro non si rimuove passando l'id di un'altra squadra")
     void removeMember_ReturnsNotFound_WhenTeamIdDoesNotMatch() throws Exception {
@@ -248,8 +241,6 @@ class AuthorizationRulesIntegrationTest {
         assertEquals(1, teamMemberRepository.count());
     }
 
-    // --- Privacy ---
-
     @Test
     @DisplayName("L'email di un utente e' visibile solo a lui stesso o a un ADMIN")
     void getUserById_HidesEmail_FromOtherUsers() throws Exception {
@@ -270,8 +261,6 @@ class AuthorizationRulesIntegrationTest {
                 .andExpect(jsonPath("$.email").value("owner@leaguemate.com"));
     }
 
-    // --- Paginazione ---
-
     @Test
     @DisplayName("Le liste sono paginate e ordinabili solo sui campi ammessi")
     void lists_ArePaginated_AndSortIsWhitelisted() throws Exception {
@@ -291,8 +280,6 @@ class AuthorizationRulesIntegrationTest {
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isBadRequest());
     }
-
-    // --- Andata e ritorno ---
 
     @Test
     @DisplayName("Un torneo andata e ritorno genera il doppio delle partite")
@@ -315,11 +302,8 @@ class AuthorizationRulesIntegrationTest {
 
         generateRounds(tournamentId, ownerToken);
 
-        // 3 squadre: 3 partite di andata + 3 di ritorno
         assertEquals(6, matchRepository.count());
     }
-
-    // --- Codici di errore ---
 
     @Test
     @DisplayName("Una richiesta senza token riceve 401, non 403")
@@ -449,5 +433,25 @@ class AuthorizationRulesIntegrationTest {
                         .header("Origin", "http://sito-malevolo.example")
                         .header("Access-Control-Request-Method", "GET"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("L'ultimo organizzatore di un torneo non puo' essere rimosso")
+    void removeOrganizer_ReturnsConflict_ForLastOrganizer() throws Exception {
+        Long tournamentId = createOwnedTournamentWithTwoTeams();
+        Long ownerId = userRepository.findByUsername("owner").orElseThrow().getId();
+
+        mockMvc.perform(delete("/api/tournaments/" + tournamentId + "/organizers/" + ownerId)
+                        .header("Authorization", "Bearer " + ownerToken))
+                .andExpect(status().isConflict());
+
+        Long intruderId = userRepository.findByUsername("intruder").orElseThrow().getId();
+        mockMvc.perform(post("/api/tournaments/" + tournamentId + "/organizers/" + intruderId)
+                        .header("Authorization", "Bearer " + ownerToken))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(delete("/api/tournaments/" + tournamentId + "/organizers/" + ownerId)
+                        .header("Authorization", "Bearer " + ownerToken))
+                .andExpect(status().isNoContent());
     }
 }

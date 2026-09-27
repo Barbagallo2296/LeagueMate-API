@@ -23,7 +23,6 @@ public final class UserMapper {
         );
     }
 
-    /** Vista pubblica di un utente: l'email, dato personale, non viene esposta. */
     public static UserResponse toPublicResponse(User user) {
         return new UserResponse(
                 user.getId(),
@@ -35,7 +34,6 @@ public final class UserMapper {
         );
     }
 
-    /** Ogni nuovo utente nasce con ruolo USER: la promozione è riservata a un ADMIN. */
     public static User fromRegisterRequest(RegisterRequest request) {
         User user = new User();
         user.setEmail(request.email());

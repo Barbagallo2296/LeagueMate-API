@@ -6,7 +6,6 @@ import org.springframework.data.domain.Sort;
 
 import java.util.Set;
 
-
 final class SortWhitelist {
 
     private SortWhitelist() {

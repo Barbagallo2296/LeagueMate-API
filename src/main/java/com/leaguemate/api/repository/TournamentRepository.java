@@ -16,10 +16,7 @@ import java.util.Optional;
 @Repository
 public interface TournamentRepository extends JpaRepository<Tournament, Long> {
 
-    List<Tournament> findBySeason(String season);
-
     Page<Tournament> findByStatus(TournamentStatus status, Pageable pageable);
-
 
     @Query("""
             SELECT DISTINCT t FROM Tournament t

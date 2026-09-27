@@ -6,11 +6,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
 
-/**
- * Autorizzazione a livello di risorsa per i tornei, usata nelle espressioni
- * {@code @PreAuthorize} come {@code @tournamentSecurity}: il ruolo ORGANIZER da
- * solo non basta, bisogna essere tra gli organizzatori del torneo specifico.
- */
 @Component("tournamentSecurity")
 @RequiredArgsConstructor
 public class TournamentSecurity {
