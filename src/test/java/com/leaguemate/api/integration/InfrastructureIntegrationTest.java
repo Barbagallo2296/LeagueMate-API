@@ -89,7 +89,7 @@ class InfrastructureIntegrationTest {
     }
 
     @Test
-    @DisplayName("La specifica OpenAPI e' pubblica e dichiara l'autenticazione JWT")
+    @DisplayName("La specifica OpenAPI e' pubblica e dichiara l'autenticazione Bearer")
     void openApiSpec_IsPublic() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())

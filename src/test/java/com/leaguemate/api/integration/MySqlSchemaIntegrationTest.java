@@ -24,9 +24,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @Testcontainers(disabledWithoutDocker = true)
 @TestPropertySource(properties = {
-        "spring.flyway.locations=classpath:db/migration,classpath:db/demo",
-        "jwt.secret=dGVzdFNlY3JldEtleUZvckxlYWd1ZU1hdGVJbnRlZ3JhdGlvblRlc3RzMjAyNg==",
-        "jwt.expiration=3600000"
+        "spring.flyway.locations=classpath:db/migration,classpath:db/demo"
 })
 @DisplayName("Integrazione - Migrazioni Flyway e dati demo su MySQL 8 reale")
 class MySqlSchemaIntegrationTest {
@@ -48,7 +46,7 @@ class MySqlSchemaIntegrationTest {
                         .content(objectMapper.writeValueAsString(new LoginRequest("law_organizer", "password123"))))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
-        String token = objectMapper.readTree(body).get("token").asText();
+        String token = objectMapper.readTree(body).get("access_token").asText();
 
         mockMvc.perform(post("/api/tournaments/1/generate-rounds")
                         .header("Authorization", "Bearer " + token))

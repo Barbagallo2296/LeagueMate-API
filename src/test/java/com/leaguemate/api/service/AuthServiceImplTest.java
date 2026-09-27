@@ -1,7 +1,8 @@
 package com.leaguemate.api.service;
 
 import com.leaguemate.api.entity.User;
-import com.leaguemate.api.security.JwtService;
+import com.leaguemate.api.dto.TokenResponse;
+import com.leaguemate.api.security.TokenService;
 import com.leaguemate.api.service.impl.AuthServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,7 +14,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.AuthenticationException;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.List;
@@ -34,7 +34,7 @@ class AuthServiceImplTest {
     private PasswordEncoder passwordEncoder;
 
     @Mock
-    private JwtService jwtService;
+    private TokenService tokenService;
 
     @Mock
     private AuthenticationManager authenticationManager;
@@ -71,21 +71,23 @@ class AuthServiceImplTest {
     void login_Success() {
         String username = "testuser";
         String password = "password123";
-        String expectedToken = "mocked-jwt-token";
+        TokenResponse expected = new TokenResponse("access", "refresh", "Bearer", 900);
+        UsernamePasswordAuthenticationToken authenticated =
+                new UsernamePasswordAuthenticationToken(sampleUser, null, List.of());
 
         Mockito.when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
-                .thenReturn(new UsernamePasswordAuthenticationToken(sampleUser, null, List.of()));
-        Mockito.when(jwtService.generateToken(sampleUser)).thenReturn(expectedToken);
+                .thenReturn(authenticated);
+        Mockito.when(tokenService.issue(authenticated)).thenReturn(expected);
 
-        String token = authService.login(username, password);
+        TokenResponse tokens = authService.login(username, password);
 
-        assertNotNull(token);
-        assertEquals(expectedToken, token);
+        assertNotNull(tokens);
+        assertEquals(expected, tokens);
         Mockito.verify(authenticationManager, Mockito.times(1)).authenticate(
                 any(UsernamePasswordAuthenticationToken.class)
         );
         Mockito.verify(userService, Mockito.never()).findByUsername(anyString());
-        Mockito.verify(jwtService, Mockito.times(1)).generateToken(sampleUser);
+        Mockito.verify(tokenService, Mockito.times(1)).issue(authenticated);
     }
 
     @Test
@@ -101,6 +103,28 @@ class AuthServiceImplTest {
                 any(UsernamePasswordAuthenticationToken.class)
         );
         Mockito.verify(userService, Mockito.never()).findByUsername(anyString());
-        Mockito.verify(jwtService, Mockito.never()).generateToken(any(UserDetails.class));
+        Mockito.verify(tokenService, Mockito.never()).issue(any());
+    }
+
+    @Test
+    void refresh_DelegatesToTokenService() {
+        TokenResponse expected = new TokenResponse("new-access", "new-refresh", "Bearer", 900);
+        Mockito.when(tokenService.refresh("old-refresh")).thenReturn(expected);
+
+        assertEquals(expected, authService.refresh("old-refresh"));
+    }
+
+    @Test
+    void logout_RevokesCurrentToken() {
+        authService.logout("access-token");
+
+        Mockito.verify(tokenService, Mockito.times(1)).revoke("access-token");
+    }
+
+    @Test
+    void logoutAll_RevokesEveryTokenOfTheUser() {
+        authService.logoutAll("testuser");
+
+        Mockito.verify(tokenService, Mockito.times(1)).revokeAll("testuser");
     }
 }

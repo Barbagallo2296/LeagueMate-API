@@ -108,4 +108,15 @@ class GlobalExceptionHandlerTest {
 
         assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
     }
+
+    @Test
+    void handleInvalidToken_Returns401WithMessage() {
+        InvalidTokenException ex = new InvalidTokenException("Invalid or expired refresh token");
+
+        ResponseEntity<?> response = exceptionHandler.handleInvalidToken(ex);
+
+        assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertTrue(response.getBody().toString().contains("Invalid or expired refresh token"));
+    }
 }

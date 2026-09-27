@@ -5,7 +5,7 @@ import com.leaguemate.api.dto.CreateTournamentRequest;
 import com.leaguemate.api.entity.Tournament;
 import com.leaguemate.api.entity.TournamentStatus;
 import com.leaguemate.api.security.CustomUserDetailsService;
-import com.leaguemate.api.security.JwtService;
+import com.leaguemate.api.security.StoredTokenIntrospector;
 import com.leaguemate.api.security.SecurityConfig;
 import com.leaguemate.api.service.TournamentService;
 import org.junit.jupiter.api.Test;
@@ -39,7 +39,7 @@ class TournamentControllerSecurityTest {
     private TournamentService tournamentService;
 
     @MockitoBean
-    private JwtService jwtService;
+    private StoredTokenIntrospector tokenIntrospector;
 
     @MockitoBean
     private CustomUserDetailsService userDetailsService;

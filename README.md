@@ -15,7 +15,8 @@ Backend REST per la gestione di tornei amatoriali di calcio a girone all'italian
 | Spring Data JPA / Hibernate | 7.x |
 | MySQL | 8.x |
 | H2 (solo test) | in memoria |
-| JWT (jjwt) | 0.12.6 |
+| Spring Authorization Server | 7.1.x (parte di Spring Security) |
+| Spring OAuth2 Resource Server | 7.1.x |
 | Flyway | 12.x |
 | Spring Boot Actuator | 4.1.x |
 | springdoc-openapi (Swagger UI) | 3.1.x |
@@ -46,7 +47,7 @@ src/main/java/com/leaguemate/api/
 ├── config/ # Configurazione OpenAPI
 ├── dto/ # Java Records (input/output)
 ├── mapper/ # Conversione Entity → DTO, in un unico punto
-├── security/ # JWT Filter, SecurityConfig, ownership dei tornei
+├── security/ # Authorization Server, token opachi, SecurityConfig, ownership dei tornei
 └── exception/ # Handler eccezioni
 
 src/main/resources/db/
@@ -61,7 +62,7 @@ I mapper sono classi statiche senza stato. I service restituiscono un DTO quando
 
 | Modulo | Controller | Service | Descrizione |
 |---|---|---|---|
-| **Auth** | `AuthController` | `AuthService` | Registrazione e login con JWT |
+| **Auth** | `AuthController` | `AuthService` | Registrazione, login, rinnovo e revoca dei token |
 | **User** | `UserController` | `UserService` | Gestione utenti, ruoli e profilo (`@OneToOne`) |
 | **Tournament** | `TournamentController` | `TournamentService` | CRUD tornei, iscrizioni, calendario, classifica, statistiche, co-organizzatori |
 | **Team** | `TeamController` | `TeamService` | CRUD squadre |
@@ -158,15 +159,18 @@ return table.values().stream()
 
 ## Sicurezza
 
-- Autenticazione **stateless** con JWT (HS256, scadenza 24h)
-- Filtro `JwtAuthFilter` valida il token ad ogni richiesta e gestisce token scaduti/malformati restituendo `401` in formato JSON
+- Autenticazione con **Spring Authorization Server**: al login vengono emessi un **access token opaco** (una stringa casuale senza dati, valida 15 minuti) e un **refresh token** (valido 7 giorni). Le durate sono configurabili con `ACCESS_TOKEN_TTL` e `REFRESH_TOKEN_TTL`
+- **Rotazione dei refresh token**: ogni rinnovo emette una nuova coppia e invalida quella precedente (`reuseRefreshTokens=false` nelle `TokenSettings` del client registrato)
+- **Token salvati solo come hash SHA-512**, come in Django Knox: `HashedOAuth2AuthorizationService` implementa l'`OAuth2AuthorizationService` dell'Authorization Server e nel database (tabella `oauth2_authorizations`) non scrive mai il token in chiaro
+- **Revoca immediata**: `logout` elimina la sessione corrente, `logout-all` tutte le sessioni dell'utente su ogni dispositivo
+- Il backend è anche **Resource Server**: ogni richiesta con `Authorization: Bearer <token>` è verificata da `StoredTokenIntrospector`, che legge l'autorizzazione direttamente dal database (nessuna chiamata HTTP) e controlla scadenza ed esistenza dell'utente
+- Le autorizzazioni scadute vengono eliminate ogni ora da un task programmato (`ExpiredTokenCleanup`)
 - Password hashate con **BCrypt**
 - Autorizzazione **per ruolo** (RBAC) tramite `@PreAuthorize` e `@EnableMethodSecurity`
 - Autorizzazione **a livello di risorsa**: un utente può modificare solo il proprio profilo, un `ADMIN` qualsiasi profilo
 - **Ownership dei tornei**: chi crea un torneo ne diventa organizzatore; un `ORGANIZER` può gestire (modifica, iscrizioni, calendario, risultati, chiusura, co-organizzatori) **solo i tornei di cui è organizzatore**, tramite il bean `TournamentSecurity` usato nelle espressioni `@PreAuthorize`. Un `ADMIN` può gestire qualsiasi torneo
 - Richiesta senza token → `401`; autenticato ma senza permessi → `403` (`AuthenticationEntryPoint` e `AccessDeniedHandler` dedicati)
 - L'email di un utente è visibile solo all'utente stesso o a un `ADMIN`
-- Nessun secret JWT di default: senza `JWT_SECRET` (Base64, almeno 256 bit) l'applicazione non parte
 - Messaggi di errore generici in fase di login per prevenire la *user enumeration*
 - **Rate limit sul login** (`LoginRateLimitFilter`, Bucket4j): 10 tentativi al minuto per IP, oltre i quali la risposta è `429 Too Many Requests` con header `Retry-After`. Configurabile con `LOGIN_RATE_LIMIT_CAPACITY` e `LOGIN_RATE_LIMIT_PERIOD`
 - **CORS** abilitato per il frontend: le origini ammesse si configurano con `CORS_ALLOWED_ORIGINS` (separate da virgola; default `http://localhost:5173,http://localhost:3000`, le porte di sviluppo di Vite e Create React App)
@@ -194,15 +198,18 @@ Gli errori che nascono nella filter chain di Spring Security (token non valido, 
 
 ---
 
-## Endpoint REST — 35 totali
+## Endpoint REST — 38 totali
 
 Le liste di tornei, squadre e utenti sono **paginate**: `?page=0&size=20&sort=name,asc` (default 20 elementi, massimo 100). La risposta ha la forma `{ "content": [...], "page": { "size", "number", "totalElements", "totalPages" } }`. Il parametro `sort` accetta solo i campi ammessi da ciascun endpoint; un campo diverso restituisce `400`.
 
-### Auth (2)
+### Auth (5)
 | Metodo | Endpoint | Accesso |
 |---|---|---|
 | POST | `/api/auth/register` | Pubblico |
-| POST | `/api/auth/login` | Pubblico |
+| POST | `/api/auth/login` | Pubblico — restituisce `access_token`, `refresh_token`, `token_type`, `expires_in` |
+| POST | `/api/auth/refresh` | Pubblico — body `{"refresh_token": "..."}`, restituisce una nuova coppia |
+| POST | `/api/auth/logout` | Autenticato — revoca la sessione corrente |
+| POST | `/api/auth/logout-all` | Autenticato — revoca tutte le sessioni dell'utente |
 
 ### Utenti (6)
 | Metodo | Endpoint | Accesso |
@@ -265,7 +272,7 @@ Le liste di tornei, squadre e utenti sono **paginate**: `?page=0&size=20&sort=na
 
 ## Documentazione API e health check
 
-- **Swagger UI**: `http://localhost:8080/swagger-ui.html` — documentazione interattiva di tutti gli endpoint. Con il pulsante *Authorize* si incolla il token JWT ottenuto dal login. Disattivabile con `SWAGGER_ENABLED=false`.
+- **Swagger UI**: `http://localhost:8080/swagger-ui.html` — documentazione interattiva di tutti gli endpoint. Con il pulsante *Authorize* si incolla l'`access_token` ottenuto dal login. Disattivabile con `SWAGGER_ENABLED=false`.
 - **Specifica OpenAPI**: `http://localhost:8080/v3/api-docs`
 - **Health check**: `http://localhost:8080/actuator/health` — pubblico, restituisce solo `{"status":"UP"}`. Nessun altro endpoint di Actuator è esposto.
 
@@ -274,8 +281,13 @@ Le liste di tornei, squadre e utenti sono **paginate**: `?page=0&size=20&sort=na
 ## Avvio con Docker (consigliato)
 
 ```bash
-cp .env.example .env              # poi impostare JWT_SECRET (openssl rand -base64 32)
 docker compose up --build
+```
+
+Nessuna configurazione è obbligatoria: ogni variabile ha un valore predefinito. Per personalizzarle (password MySQL, durata dei token, porte) si copia `.env.example` in `.env`:
+
+```bash
+cp .env.example .env
 ```
 
 Un solo comando avvia MySQL 8 e l'applicazione. All'avvio Flyway applica le migrazioni dello schema e carica i dati demo. Il Dockerfile scarica le dipendenze Maven in un layer separato (le build successive riusano la cache se il `pom.xml` non cambia), l'applicazione gira con un utente non-root e il container ha un `HEALTHCHECK` sull'endpoint di Actuator. Il build è multi-stage (Maven → JRE), MySQL ha un healthcheck e l'app attende che sia pronto.
@@ -300,18 +312,17 @@ Il torneo di esempio è in stato `DRAFT` con 4 squadre iscritte e `law_organizer
 ### Prerequisiti
 Java 21, Maven 3.x, MySQL 8.x
 
-Ogni proprietà in `application.properties` è sovrascrivibile da variabile d'ambiente. Il datasource ha un default per lo sviluppo locale; `JWT_SECRET` invece è **obbligatorio** e non ha default:
+Ogni proprietà in `application.properties` è sovrascrivibile da variabile d'ambiente e ha un valore predefinito per lo sviluppo locale:
 
 ```properties
 spring.datasource.url=${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/leaguemate_db?createDatabaseIfNotExist=true}
 spring.datasource.username=${SPRING_DATASOURCE_USERNAME:root}
 spring.datasource.password=${SPRING_DATASOURCE_PASSWORD:root}
-jwt.secret=${JWT_SECRET}
-jwt.expiration=${JWT_EXPIRATION:86400000}
+app.auth.access-token-ttl=${ACCESS_TOKEN_TTL:15m}
+app.auth.refresh-token-ttl=${REFRESH_TOKEN_TTL:7d}
 ```
 
 ```bash
-export JWT_SECRET=$(openssl rand -base64 32)
 export FLYWAY_LOCATIONS=classpath:db/migration,classpath:db/demo   # facoltativo: dati demo
 ./mvnw spring-boot:run
 ```
@@ -320,8 +331,8 @@ export FLYWAY_LOCATIONS=classpath:db/migration,classpath:db/demo   # facoltativo
 
 ## Testing
 
-**153 test** con JUnit 5, Mockito, Spring Security Test e MockMvc — tutti verdi.
-**Code coverage: 93%** (requisito minimo 35%).
+**157 test** con JUnit 5, Mockito, Spring Security Test e MockMvc — tutti verdi.
+**Code coverage: 92%** (requisito minimo 35%).
 
 ### Test unitari (service, security, exception)
 
@@ -331,11 +342,9 @@ export FLYWAY_LOCATIONS=classpath:db/migration,classpath:db/demo   # facoltativo
 | `UserServiceImpl` | 18 | Registrazione, ruoli, **profilo con autorizzazione a livello di risorsa** |
 | `TeamServiceImpl` | 9 | CRUD completo, unicità nome, vincoli di cancellazione |
 | `TeamMemberServiceImpl` | 10 | Aggiunta membri, duplicati, rimozione vincolata alla squadra |
-| `GlobalExceptionHandler` | 7 | 400, 401, 404, 409, 500 e mascheramento messaggi |
+| `GlobalExceptionHandler` | 8 | 400, 401, 404, 409, 500, token non valido e mascheramento messaggi |
 | `MatchServiceImpl` | 7 | Aggiornamento risultato, blocco su torneo non attivo, giornata inesistente, caricamento eager |
-| `JwtService` | 6 | Generazione, estrazione, validazione token, rifiuto di secret mancanti o corti |
-| `JwtAuthFilter` | 4 | Token valido, mancante, malformato |
-| `AuthServiceImpl` | 3 | Registrazione con hashing, login |
+| `AuthServiceImpl` | 6 | Registrazione con hashing, login, rinnovo, logout e logout-all |
 | `TournamentControllerSecurityTest` | 3 | **403 con USER, 201 con ORGANIZER** (`@WebMvcTest`) |
 
 ### Test di integrazione (H2 in memoria, `@SpringBootTest` + MockMvc)
@@ -343,6 +352,7 @@ export FLYWAY_LOCATIONS=classpath:db/migration,classpath:db/demo   # facoltativo
 | Classe | Test | Descrizione |
 |---|---|---|
 | `AuthIntegrationTest` | 10 | Flusso register→login→endpoint protetto, RBAC, 401 identici, password mai esposta |
+| `TokenAuthenticationIntegrationTest` | 10 | Token opachi, hash nel database, rotazione dei refresh token, logout, logout-all, scadenze, pulizia automatica |
 | `TournamentFlowIntegrationTest` | 10 | Ciclo di vita completo del torneo end-to-end |
 | `InfrastructureIntegrationTest` | 6 | Rate limit sul login, health check, specifica OpenAPI |
 | `MySqlSchemaIntegrationTest` | 1 | Migrazioni Flyway e dati demo su **MySQL 8 reale** (Testcontainers) |
@@ -355,13 +365,13 @@ I test di integrazione girano su un database H2 in memoria (profilo `test`) su c
 
 | Package | Coverage |
 |---|---|
-| `security` | 98% |
-| `exception` | 82% |
+| `security` | 92% |
+| `exception` | 83% |
 | `service.impl` | 97% |
 | `mapper` | 100% |
 | `config` | 100% |
 | `controller` | 79% |
-| **Totale** | **93%** |
+| **Totale** | **92%** |
 
 > `dto` ed `entity` sono esclusi dal report (boilerplate Lombok). I controller sono **inclusi** e coperti dai test di integrazione.
 

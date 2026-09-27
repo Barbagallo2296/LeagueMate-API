@@ -104,7 +104,7 @@ class AuthorizationRulesIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
 
-        return objectMapper.readTree(body).get("token").asText();
+        return objectMapper.readTree(body).get("access_token").asText();
     }
 
     private Long createTeam(String name) throws Exception {

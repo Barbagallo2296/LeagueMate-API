@@ -32,8 +32,8 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-leaguemate_pass}
       SPRING_JPA_HIBERNATE_DDL_AUTO: validate
       FLYWAY_LOCATIONS: classpath:db/migration,classpath:db/demo
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET non impostato - copia .env.example in .env}
-      JWT_EXPIRATION: ${JWT_EXPIRATION:-86400000}
+      ACCESS_TOKEN_TTL: ${ACCESS_TOKEN_TTL:-15m}
+      REFRESH_TOKEN_TTL: ${REFRESH_TOKEN_TTL:-7d}
     depends_on:
       db:
         condition: service_healthy

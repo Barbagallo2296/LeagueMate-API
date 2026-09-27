@@ -67,7 +67,7 @@ class AuthIntegrationTest {
                 .getResponse()
                 .getContentAsString();
 
-        return objectMapper.readTree(body).get("token").asText();
+        return objectMapper.readTree(body).get("access_token").asText();
     }
 
     @Test
@@ -137,7 +137,7 @@ class AuthIntegrationTest {
     }
 
     @Test
-    @DisplayName("Login: credenziali corrette restituiscono un token JWT")
+    @DisplayName("Login: credenziali corrette restituiscono access token e refresh token")
     void login_ReturnsToken_WhenCredentialsAreValid() throws Exception {
         persistUser("manuel22", "manuel@leaguemate.com", Role.ADMIN);
 
@@ -146,7 +146,9 @@ class AuthIntegrationTest {
                         .content(objectMapper.writeValueAsString(
                                 new LoginRequest("manuel22", "password123"))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.token").isNotEmpty());
+                .andExpect(jsonPath("$.access_token").isNotEmpty())
+                .andExpect(jsonPath("$.refresh_token").isNotEmpty())
+                .andExpect(jsonPath("$.token_type").value("Bearer"));
     }
 
     @Test
@@ -190,7 +192,7 @@ class AuthIntegrationTest {
     }
 
     @Test
-    @DisplayName("Token JWT malformato restituisce 401 dal filtro")
+    @DisplayName("Un token sconosciuto restituisce 401")
     void malformedToken_ReturnsUnauthorized() throws Exception {
         mockMvc.perform(get("/api/users/me")
                         .header("Authorization", "Bearer token-non-valido"))

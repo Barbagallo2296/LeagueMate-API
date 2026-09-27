@@ -1,14 +1,14 @@
 package com.leaguemate.api.service.impl;
 
+import com.leaguemate.api.dto.TokenResponse;
 import com.leaguemate.api.entity.User;
-import com.leaguemate.api.security.JwtService;
+import com.leaguemate.api.security.TokenService;
 import com.leaguemate.api.service.AuthService;
 import com.leaguemate.api.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,7 +19,7 @@ public class AuthServiceImpl implements AuthService {
 
     private final UserService userService;
     private final PasswordEncoder passwordEncoder;
-    private final JwtService jwtService;
+    private final TokenService tokenService;
     private final AuthenticationManager authenticationManager;
 
     @Override
@@ -30,11 +30,25 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    public String login(String username, String password) {
+    public TokenResponse login(String username, String password) {
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(username, password)
         );
+        return tokenService.issue(authentication);
+    }
 
-        return jwtService.generateToken((UserDetails) authentication.getPrincipal());
+    @Override
+    public TokenResponse refresh(String refreshToken) {
+        return tokenService.refresh(refreshToken);
+    }
+
+    @Override
+    public void logout(String accessToken) {
+        tokenService.revoke(accessToken);
+    }
+
+    @Override
+    public void logoutAll(String username) {
+        tokenService.revokeAll(username);
     }
 }
