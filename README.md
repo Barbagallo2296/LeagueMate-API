@@ -151,6 +151,8 @@ return table.values().stream()
 - I risultati si inseriscono solo in un torneo `ACTIVE`
 - Un torneo si chiude (`ACTIVE → COMPLETED`) solo quando tutte le partite sono state giocate; da quel momento i risultati sono bloccati
 - Non è possibile declassare l'ultimo `ADMIN` rimasto
+- I punti per vittoria e pareggio si modificano solo in stato `DRAFT`: dopo l'avvio si possono cambiare solo nome e stagione
+- Solo un utente con ruolo `ORGANIZER` o `ADMIN` può diventare co-organizzatore di un torneo
 
 ---
 
@@ -167,6 +169,7 @@ return table.values().stream()
 - Nessun secret JWT di default: senza `JWT_SECRET` (Base64, almeno 256 bit) l'applicazione non parte
 - Messaggi di errore generici in fase di login per prevenire la *user enumeration*
 - **Rate limit sul login** (`LoginRateLimitFilter`, Bucket4j): 10 tentativi al minuto per IP, oltre i quali la risposta è `429 Too Many Requests` con header `Retry-After`. Configurabile con `LOGIN_RATE_LIMIT_CAPACITY` e `LOGIN_RATE_LIMIT_PERIOD`
+- **CORS** abilitato per il frontend: le origini ammesse si configurano con `CORS_ALLOWED_ORIGINS` (separate da virgola; default `http://localhost:5173,http://localhost:3000`, le porte di sviluppo di Vite e Create React App)
 
 ---
 
@@ -191,7 +194,7 @@ Gli errori che nascono nella filter chain di Spring Security (token non valido, 
 
 ---
 
-## Endpoint REST — 32 totali
+## Endpoint REST — 35 totali
 
 Le liste di tornei, squadre e utenti sono **paginate**: `?page=0&size=20&sort=name,asc` (default 20 elementi, massimo 100). La risposta ha la forma `{ "content": [...], "page": { "size", "number", "totalElements", "totalPages" } }`. Il parametro `sort` accetta solo i campi ammessi da ciascun endpoint; un campo diverso restituisce `400`.
 
@@ -211,11 +214,12 @@ Le liste di tornei, squadre e utenti sono **paginate**: `?page=0&size=20&sort=na
 | GET | `/api/users/{id}/profile` | Autenticato |
 | PUT | `/api/users/{id}/profile` | Proprietario o **ADMIN** |
 
-### Tornei (11)
+### Tornei (14)
 | Metodo | Endpoint | Accesso |
 |---|---|---|
 | POST | `/api/tournaments` | **ADMIN / ORGANIZER** |
 | GET | `/api/tournaments` | Autenticato |
+| GET | `/api/tournaments/mine` | Autenticato — tornei di cui l'utente è organizzatore |
 | GET | `/api/tournaments/{id}` | Autenticato |
 | GET | `/api/tournaments/status/{status}` | Autenticato |
 | PUT | `/api/tournaments/{id}` | **ADMIN / organizzatore del torneo** |
@@ -225,6 +229,8 @@ Le liste di tornei, squadre e utenti sono **paginate**: `?page=0&size=20&sort=na
 | POST | `/api/tournaments/{id}/complete` | **ADMIN / organizzatore del torneo** |
 | GET | `/api/tournaments/{id}/standings` | Autenticato |
 | GET | `/api/tournaments/{id}/stats` | Autenticato |
+| GET | `/api/tournaments/{id}/rounds` | Autenticato — calendario completo: giornate con le partite |
+| GET | `/api/tournaments/{id}/teams` | Autenticato — squadre iscritte |
 
 ### Co-organizzatori — `@ManyToMany` (3)
 | Metodo | Endpoint | Accesso |
@@ -314,19 +320,19 @@ export FLYWAY_LOCATIONS=classpath:db/migration,classpath:db/demo   # facoltativo
 
 ## Testing
 
-**139 test** con JUnit 5, Mockito, Spring Security Test e MockMvc — tutti verdi.
-**Code coverage: 92%** (requisito minimo 35%).
+**153 test** con JUnit 5, Mockito, Spring Security Test e MockMvc — tutti verdi.
+**Code coverage: 93%** (requisito minimo 35%).
 
 ### Test unitari (service, security, exception)
 
 | Classe testata | Test | Descrizione |
 |---|---|---|
-| `TournamentServiceImpl` | 34 | CRUD, **generazione calendario** (anche andata e ritorno), **classifica**, **statistiche**, co-organizzatori, chiusura torneo |
+| `TournamentServiceImpl` | 41 | CRUD, **generazione calendario** (anche andata e ritorno), **classifica**, **statistiche**, co-organizzatori, chiusura torneo, calendario e squadre iscritte |
 | `UserServiceImpl` | 18 | Registrazione, ruoli, **profilo con autorizzazione a livello di risorsa** |
 | `TeamServiceImpl` | 9 | CRUD completo, unicità nome, vincoli di cancellazione |
 | `TeamMemberServiceImpl` | 10 | Aggiunta membri, duplicati, rimozione vincolata alla squadra |
 | `GlobalExceptionHandler` | 7 | 400, 401, 404, 409, 500 e mascheramento messaggi |
-| `MatchServiceImpl` | 6 | Aggiornamento risultato, blocco su torneo non attivo, caricamento eager |
+| `MatchServiceImpl` | 7 | Aggiornamento risultato, blocco su torneo non attivo, giornata inesistente, caricamento eager |
 | `JwtService` | 6 | Generazione, estrazione, validazione token, rifiuto di secret mancanti o corti |
 | `JwtAuthFilter` | 4 | Token valido, mancante, malformato |
 | `AuthServiceImpl` | 3 | Registrazione con hashing, login |
@@ -340,7 +346,7 @@ export FLYWAY_LOCATIONS=classpath:db/migration,classpath:db/demo   # facoltativo
 | `TournamentFlowIntegrationTest` | 10 | Ciclo di vita completo del torneo end-to-end |
 | `InfrastructureIntegrationTest` | 6 | Rate limit sul login, health check, specifica OpenAPI |
 | `MySqlSchemaIntegrationTest` | 1 | Migrazioni Flyway e dati demo su **MySQL 8 reale** (Testcontainers) |
-| `AuthorizationRulesIntegrationTest` | 11 | Ownership dei tornei, chiusura torneo, andata e ritorno, paginazione, membri, privacy email, 401/400 |
+| `AuthorizationRulesIntegrationTest` | 17 | Ownership dei tornei, chiusura torneo, andata e ritorno, paginazione, calendario, squadre iscritte, i miei tornei, CORS, membri, privacy email, 401/400/404/409 |
 | `ApiApplicationTests` | 1 | Caricamento del contesto Spring |
 
 I test di integrazione girano su un database H2 in memoria (profilo `test`) su cui Flyway applica le stesse migrazioni della produzione, quindi la suite si esegue senza un MySQL attivo. `MySqlSchemaIntegrationTest` avvia invece un MySQL 8 in un container: gira quando Docker è disponibile (sempre in CI) e viene saltato altrimenti.
@@ -349,13 +355,13 @@ I test di integrazione girano su un database H2 in memoria (profilo `test`) su c
 
 | Package | Coverage |
 |---|---|
-| `security` | 97% |
+| `security` | 98% |
 | `exception` | 82% |
 | `service.impl` | 97% |
-| `mapper` | 99% |
+| `mapper` | 100% |
 | `config` | 100% |
-| `controller` | 73% |
-| **Totale** | **92%** |
+| `controller` | 79% |
+| **Totale** | **93%** |
 
 > `dto` ed `entity` sono esclusi dal report (boilerplate Lombok). I controller sono **inclusi** e coperti dai test di integrazione.
 

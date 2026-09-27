@@ -3,6 +3,7 @@ package com.leaguemate.api.service;
 import com.leaguemate.api.dto.StandingEntry;
 import com.leaguemate.api.dto.TournamentStatsResponse;
 import com.leaguemate.api.entity.Round;
+import com.leaguemate.api.entity.Team;
 import com.leaguemate.api.entity.Tournament;
 import com.leaguemate.api.entity.TournamentRegistration;
 import com.leaguemate.api.entity.TournamentStatus;
@@ -24,6 +25,12 @@ public interface TournamentService {
     TournamentRegistration registerTeamToTournament(Long tournamentId, Long teamId);
 
     List<Round> generateRounds(Long tournamentId);
+
+    List<Round> getRounds(Long tournamentId);
+
+    List<Team> getRegisteredTeams(Long tournamentId);
+
+    List<Tournament> getTournamentsOrganizedBy(Long userId);
 
     Tournament completeTournament(Long tournamentId);
 

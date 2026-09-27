@@ -9,6 +9,7 @@ import com.leaguemate.api.entity.TournamentStatus;
 import com.leaguemate.api.exception.ResourceConflictException;
 import com.leaguemate.api.exception.ResourceNotFoundException;
 import com.leaguemate.api.repository.MatchRepository;
+import com.leaguemate.api.repository.RoundRepository;
 import com.leaguemate.api.service.impl.MatchServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,6 +30,9 @@ class MatchServiceImplTest {
 
     @Mock
     private MatchRepository matchRepository;
+
+    @Mock
+    private RoundRepository roundRepository;
 
     @InjectMocks
     private MatchServiceImpl matchService;
@@ -121,6 +125,7 @@ class MatchServiceImplTest {
 
     @Test
     void getMatchesByRound_ReturnsList() {
+        when(roundRepository.existsById(1L)).thenReturn(true);
         when(matchRepository.findByRoundIdWithTeams(1L)).thenReturn(List.of(match));
 
         List<Match> result = matchService.getMatchesByRound(1L);
@@ -128,5 +133,13 @@ class MatchServiceImplTest {
         assertEquals(1, result.size());
         assertEquals("Straw Hat FC", result.get(0).getHomeTeam().getName());
         verify(matchRepository, times(1)).findByRoundIdWithTeams(1L);
+    }
+
+    @Test
+    void getMatchesByRound_ThrowsNotFound_WhenRoundDoesNotExist() {
+        when(roundRepository.existsById(99L)).thenReturn(false);
+
+        assertThrows(ResourceNotFoundException.class, () -> matchService.getMatchesByRound(99L));
+        verify(matchRepository, never()).findByRoundIdWithTeams(anyLong());
     }
 }

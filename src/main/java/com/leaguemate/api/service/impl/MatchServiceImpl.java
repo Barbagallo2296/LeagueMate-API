@@ -6,6 +6,7 @@ import com.leaguemate.api.entity.TournamentStatus;
 import com.leaguemate.api.exception.ResourceConflictException;
 import com.leaguemate.api.exception.ResourceNotFoundException;
 import com.leaguemate.api.repository.MatchRepository;
+import com.leaguemate.api.repository.RoundRepository;
 import com.leaguemate.api.service.MatchService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -18,6 +19,7 @@ import java.util.List;
 public class MatchServiceImpl implements MatchService {
 
     private final MatchRepository matchRepository;
+    private final RoundRepository roundRepository;
 
     @Override
     @Transactional
@@ -42,6 +44,9 @@ public class MatchServiceImpl implements MatchService {
     @Override
     @Transactional(readOnly = true)
     public List<Match> getMatchesByRound(Long roundId) {
+        if (!roundRepository.existsById(roundId)) {
+            throw new ResourceNotFoundException("Round not found with id: " + roundId);
+        }
         return matchRepository.findByRoundIdWithTeams(roundId);
     }
 }

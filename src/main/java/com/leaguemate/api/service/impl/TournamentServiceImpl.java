@@ -25,6 +25,7 @@ public class TournamentServiceImpl implements TournamentService {
     private final TournamentRegistrationRepository registrationRepository;
     private final MatchRepository matchRepository;
     private final UserRepository userRepository;
+    private final RoundRepository roundRepository;
     private static final class TeamStats {
 
         private final String teamName;
@@ -107,6 +108,13 @@ public class TournamentServiceImpl implements TournamentService {
 
         if (tournament.getStatus() == TournamentStatus.COMPLETED) {
             throw new ResourceConflictException("Cannot modify a completed tournament");
+        }
+
+        boolean pointsChanged = tournament.getPointsForWin() != pointsForWin
+                || tournament.getPointsForDraw() != pointsForDraw;
+        if (pointsChanged && tournament.getStatus() != TournamentStatus.DRAFT) {
+            throw new ResourceConflictException(
+                    "Points configuration can only be changed while the tournament is in DRAFT status");
         }
 
         tournament.setName(name);
@@ -264,6 +272,34 @@ public class TournamentServiceImpl implements TournamentService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<Round> getRounds(Long tournamentId) {
+        requireTournament(tournamentId);
+        return roundRepository.findByTournamentIdWithMatches(tournamentId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Team> getRegisteredTeams(Long tournamentId) {
+        requireTournament(tournamentId);
+        return registrationRepository.findConfirmedWithTeams(tournamentId, RegistrationStatus.CONFIRMED).stream()
+                .map(TournamentRegistration::getTeam)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Tournament> getTournamentsOrganizedBy(Long userId) {
+        return tournamentRepository.findTournamentsByOrganizerId(userId);
+    }
+
+    private void requireTournament(Long tournamentId) {
+        if (!tournamentRepository.existsById(tournamentId)) {
+            throw new ResourceNotFoundException("Tournament not found with id: " + tournamentId);
+        }
+    }
+
+    @Override
     @Transactional
     public Tournament completeTournament(Long tournamentId) {
         Tournament tournament = getTournamentById(tournamentId);
@@ -378,6 +414,10 @@ public class TournamentServiceImpl implements TournamentService {
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
+
+        if (user.getRole() == Role.USER) {
+            throw new ResourceConflictException("Only users with ORGANIZER or ADMIN role can organize a tournament");
+        }
 
         if (tournament.getOrganizers().contains(user)) {
             throw new ResourceConflictException("User is already an organizer of this tournament");

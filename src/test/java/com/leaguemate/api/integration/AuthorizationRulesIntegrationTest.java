@@ -6,6 +6,7 @@ import com.leaguemate.api.dto.CreateTeamRequest;
 import com.leaguemate.api.dto.CreateTournamentRequest;
 import com.leaguemate.api.dto.LoginRequest;
 import com.leaguemate.api.dto.UpdateMatchResultRequest;
+import com.leaguemate.api.dto.UpdateTournamentRequest;
 import com.leaguemate.api.entity.Role;
 import com.leaguemate.api.entity.TeamRole;
 import com.leaguemate.api.entity.User;
@@ -23,6 +24,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -348,5 +350,104 @@ class AuthorizationRulesIntegrationTest {
         mockMvc.perform(get("/api/tournaments/abc")
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("Il calendario del torneo espone giornate e partite")
+    void rounds_ExposeCalendarWithMatches() throws Exception {
+        Long tournamentId = createOwnedTournamentWithTwoTeams();
+        generateRounds(tournamentId, ownerToken);
+
+        mockMvc.perform(get("/api/tournaments/" + tournamentId + "/rounds")
+                        .header("Authorization", "Bearer " + userToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].roundNumber").value(1))
+                .andExpect(jsonPath("$[0].matches.length()").value(1))
+                .andExpect(jsonPath("$[0].matches[0].homeTeamName").isNotEmpty());
+
+        mockMvc.perform(get("/api/tournaments/99999/rounds")
+                        .header("Authorization", "Bearer " + userToken))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("Le squadre iscritte e i tornei dell'organizzatore sono consultabili")
+    void registeredTeams_AndMyTournaments() throws Exception {
+        Long tournamentId = createOwnedTournamentWithTwoTeams();
+
+        mockMvc.perform(get("/api/tournaments/" + tournamentId + "/teams")
+                        .header("Authorization", "Bearer " + userToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].id").isNumber());
+
+        mockMvc.perform(get("/api/tournaments/mine")
+                        .header("Authorization", "Bearer " + ownerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].id").value(tournamentId));
+
+        mockMvc.perform(get("/api/tournaments/mine")
+                        .header("Authorization", "Bearer " + otherOrganizerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    @Test
+    @DisplayName("Una giornata inesistente restituisce 404")
+    void matchesOfUnknownRound_ReturnNotFound() throws Exception {
+        mockMvc.perform(get("/api/matches/round/99999")
+                        .header("Authorization", "Bearer " + userToken))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("Un utente con ruolo USER non puo' diventare co-organizzatore")
+    void addOrganizer_ReturnsConflict_ForPlainUser() throws Exception {
+        Long tournamentId = createOwnedTournamentWithTwoTeams();
+        Long playerId = userRepository.findByUsername("player").orElseThrow().getId();
+
+        mockMvc.perform(post("/api/tournaments/" + tournamentId + "/organizers/" + playerId)
+                        .header("Authorization", "Bearer " + ownerToken))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    @DisplayName("I punti non si modificano dopo l'avvio del torneo")
+    void updatePoints_ReturnsConflict_AfterStart() throws Exception {
+        Long tournamentId = createOwnedTournamentWithTwoTeams();
+        generateRounds(tournamentId, ownerToken);
+
+        mockMvc.perform(put("/api/tournaments/" + tournamentId)
+                        .header("Authorization", "Bearer " + ownerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new UpdateTournamentRequest("Owner Cup", "2026/2027", 2, 1))))
+                .andExpect(status().isConflict());
+
+        mockMvc.perform(put("/api/tournaments/" + tournamentId)
+                        .header("Authorization", "Bearer " + ownerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new UpdateTournamentRequest("Owner Cup Rinominata", "2026/2027", 3, 1))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Owner Cup Rinominata"));
+    }
+
+    @Test
+    @DisplayName("Il preflight CORS dal frontend React e' accettato, da altre origini no")
+    void corsPreflight_AllowsConfiguredOriginOnly() throws Exception {
+        mockMvc.perform(options("/api/tournaments")
+                        .header("Origin", "http://localhost:5173")
+                        .header("Access-Control-Request-Method", "GET")
+                        .header("Access-Control-Request-Headers", "Authorization"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:5173"));
+
+        mockMvc.perform(options("/api/tournaments")
+                        .header("Origin", "http://sito-malevolo.example")
+                        .header("Access-Control-Request-Method", "GET"))
+                .andExpect(status().isForbidden());
     }
 }

@@ -1,14 +1,15 @@
 package com.leaguemate.api.mapper;
 
 import com.leaguemate.api.dto.MatchResponse;
+import com.leaguemate.api.dto.RoundResponse;
 import com.leaguemate.api.entity.Match;
+import com.leaguemate.api.entity.Round;
 
 public final class MatchMapper {
 
     private MatchMapper() {
     }
 
-    /** Legge squadre e giornata della partita: vanno caricate con JOIN FETCH nel repository. */
     public static MatchResponse toResponse(Match match) {
         return new MatchResponse(
                 match.getId(),
@@ -20,6 +21,14 @@ public final class MatchMapper {
                 match.getAwayScore(),
                 match.getStatus().name(),
                 match.getRound().getRoundNumber()
+        );
+    }
+
+    public static RoundResponse toRoundResponse(Round round) {
+        return new RoundResponse(
+                round.getId(),
+                round.getRoundNumber(),
+                round.getMatches().stream().map(MatchMapper::toResponse).toList()
         );
     }
 }

@@ -6,6 +6,7 @@ import com.leaguemate.api.entity.*;
 import com.leaguemate.api.exception.ResourceConflictException;
 import com.leaguemate.api.exception.ResourceNotFoundException;
 import com.leaguemate.api.repository.MatchRepository;
+import com.leaguemate.api.repository.RoundRepository;
 import com.leaguemate.api.repository.TeamRepository;
 import com.leaguemate.api.repository.TournamentRegistrationRepository;
 import com.leaguemate.api.repository.TournamentRepository;
@@ -45,6 +46,8 @@ class TournamentServiceImplTest {
     private MatchRepository matchRepository;
     @Mock
     private UserRepository userRepository;
+    @Mock
+    private RoundRepository roundRepository;
 
     @InjectMocks
     private TournamentServiceImpl tournamentService;
@@ -226,6 +229,27 @@ class TournamentServiceImplTest {
         assertEquals("Nuovo Nome", updated.getName());
         assertEquals("2027/2028", updated.getSeason());
         verify(tournamentRepository, times(1)).save(tournament);
+    }
+
+    @Test
+    void updateTournament_ThrowsConflict_WhenPointsChangeAfterStart() {
+        tournament.setStatus(TournamentStatus.ACTIVE);
+        when(tournamentRepository.findById(1L)).thenReturn(Optional.of(tournament));
+
+        assertThrows(ResourceConflictException.class,
+                () -> tournamentService.updateTournament(1L, "Champions League", "2026/2027", 2, 1));
+        verify(tournamentRepository, never()).save(any(Tournament.class));
+    }
+
+    @Test
+    void updateTournament_AllowsRename_WhenActiveAndPointsUnchanged() {
+        tournament.setStatus(TournamentStatus.ACTIVE);
+        when(tournamentRepository.findById(1L)).thenReturn(Optional.of(tournament));
+        when(tournamentRepository.save(any(Tournament.class))).thenReturn(tournament);
+
+        Tournament updated = tournamentService.updateTournament(1L, "Nuovo Nome", "2026/2027", 3, 1);
+
+        assertEquals("Nuovo Nome", updated.getName());
     }
 
     @Test
@@ -578,6 +602,16 @@ class TournamentServiceImplTest {
     }
 
     @Test
+    void addOrganizer_ThrowsConflict_WhenUserHasPlainUserRole() {
+        user.setRole(Role.USER);
+        when(tournamentRepository.findById(1L)).thenReturn(Optional.of(tournament));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        assertThrows(ResourceConflictException.class, () -> tournamentService.addOrganizer(1L, 1L));
+        assertFalse(tournament.getOrganizers().contains(user));
+    }
+
+    @Test
     void addOrganizer_ThrowsConflict_WhenAlreadyOrganizer() {
         tournament.getOrganizers().add(user);
         when(tournamentRepository.findById(1L)).thenReturn(Optional.of(tournament));
@@ -617,5 +651,43 @@ class TournamentServiceImplTest {
 
         assertEquals(1, organizers.size());
         assertEquals("organizer1", organizers.get(0).getUsername());
+    }
+
+    @Test
+    void getRounds_ThrowsNotFound_WhenTournamentDoesNotExist() {
+        when(tournamentRepository.existsById(99L)).thenReturn(false);
+
+        assertThrows(ResourceNotFoundException.class, () -> tournamentService.getRounds(99L));
+        verify(roundRepository, never()).findByTournamentIdWithMatches(any());
+    }
+
+    @Test
+    void getRounds_ReturnsRoundsOfTournament() {
+        Round round = new Round();
+        round.setRoundNumber(1);
+        when(tournamentRepository.existsById(1L)).thenReturn(true);
+        when(roundRepository.findByTournamentIdWithMatches(1L)).thenReturn(List.of(round));
+
+        List<Round> rounds = tournamentService.getRounds(1L);
+
+        assertEquals(1, rounds.size());
+    }
+
+    @Test
+    void getRegisteredTeams_ReturnsConfirmedTeams() {
+        when(tournamentRepository.existsById(1L)).thenReturn(true);
+        when(registrationRepository.findConfirmedWithTeams(1L, RegistrationStatus.CONFIRMED))
+                .thenReturn(List.of(createReg(teamA), createReg(teamB)));
+
+        List<Team> teams = tournamentService.getRegisteredTeams(1L);
+
+        assertEquals(List.of(teamA, teamB), teams);
+    }
+
+    @Test
+    void getTournamentsOrganizedBy_DelegatesToRepository() {
+        when(tournamentRepository.findTournamentsByOrganizerId(1L)).thenReturn(List.of(tournament));
+
+        assertEquals(List.of(tournament), tournamentService.getTournamentsOrganizedBy(1L));
     }
 }

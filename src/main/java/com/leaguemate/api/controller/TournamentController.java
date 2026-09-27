@@ -3,6 +3,9 @@ package com.leaguemate.api.controller;
 import com.leaguemate.api.dto.*;
 import com.leaguemate.api.entity.Tournament;
 import com.leaguemate.api.entity.TournamentStatus;
+import com.leaguemate.api.entity.User;
+import com.leaguemate.api.mapper.MatchMapper;
+import com.leaguemate.api.mapper.TeamMapper;
 import com.leaguemate.api.mapper.TournamentMapper;
 import com.leaguemate.api.mapper.UserMapper;
 import com.leaguemate.api.service.TournamentService;
@@ -15,6 +18,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -45,6 +49,13 @@ public class TournamentController {
 
         Tournament created = tournamentService.createTournament(tournament, authentication.getName());
         return new ResponseEntity<>(TournamentMapper.toResponse(created), HttpStatus.CREATED);
+    }
+
+    @GetMapping("/mine")
+    public ResponseEntity<List<TournamentResponse>> getMyTournaments(@AuthenticationPrincipal User currentUser) {
+        return ResponseEntity.ok(tournamentService.getTournamentsOrganizedBy(currentUser.getId()).stream()
+                .map(TournamentMapper::toResponse)
+                .toList());
     }
 
     @GetMapping("/{id}")
@@ -108,6 +119,20 @@ public class TournamentController {
     @PreAuthorize(OWNER_OR_ADMIN)
     public ResponseEntity<TournamentResponse> completeTournament(@PathVariable Long tournamentId) {
         return ResponseEntity.ok(TournamentMapper.toResponse(tournamentService.completeTournament(tournamentId)));
+    }
+
+    @GetMapping("/{tournamentId}/rounds")
+    public ResponseEntity<List<RoundResponse>> getRounds(@PathVariable Long tournamentId) {
+        return ResponseEntity.ok(tournamentService.getRounds(tournamentId).stream()
+                .map(MatchMapper::toRoundResponse)
+                .toList());
+    }
+
+    @GetMapping("/{tournamentId}/teams")
+    public ResponseEntity<List<TeamResponse>> getRegisteredTeams(@PathVariable Long tournamentId) {
+        return ResponseEntity.ok(tournamentService.getRegisteredTeams(tournamentId).stream()
+                .map(TeamMapper::toResponse)
+                .toList());
     }
 
     @GetMapping("/{tournamentId}/standings")
