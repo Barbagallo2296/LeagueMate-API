@@ -392,7 +392,7 @@ A ogni push su `main` e a ogni pull request GitHub Actions (`.github/workflows/c
 |---|---|
 | Codice sorgente completo | ✅ |
 | Script SQL (migrazioni Flyway in `db/migration` + dati demo in `db/demo`) | ✅ |
-| Collection Postman (39 richieste, 8 cartelle) | ✅ |
+| Collection Postman (48 richieste, 9 cartelle; login, refresh e logout gestiti in automatico) | ✅ |
 | Script Docker (`Dockerfile` + `docker-compose.yml`) | ✅ |
 | Relazione tecnica | ✅ |
 
